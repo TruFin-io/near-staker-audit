@@ -176,9 +176,9 @@ async fn test_collect_fees_if_rewards_accrue_and_initial_stake_unstaked(
         .await?;
     assert!(stake.is_success());
 
-    let _ = move_epoch_forward(&sandbox, &contract).await?;
-    let _ = move_epoch_forward(&sandbox, &contract).await?;
-    let _ = move_epoch_forward_and_update_total_staked(&sandbox, &contract, owner).await?;
+    move_epoch_forward(&sandbox, &contract).await?;
+    move_epoch_forward(&sandbox, &contract).await?;
+    move_epoch_forward_and_update_total_staked(&sandbox, &contract, owner).await?;
 
     // total staked is now 10 NEAR + rewards
     let (total_staked, _) = get_total_staked(contract.clone()).await?;

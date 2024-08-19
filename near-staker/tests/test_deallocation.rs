@@ -125,7 +125,7 @@ async fn test_deallocating_non_existent_allocation_fails() -> Result<(), Box<dyn
     let (owner, _, contract) = setup_contract().await?;
     let alice = setup_whitelisted_user(&owner, &contract, "alice").await?;
 
-    setup_allocation(&alice, &accounts(2), ONE_NEAR, &contract.id()).await?;
+    setup_allocation(&alice, &accounts(2), ONE_NEAR, contract.id()).await?;
 
     let deallocation = alice
         .call(contract.id(), "deallocate")

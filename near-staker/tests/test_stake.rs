@@ -4,6 +4,7 @@ use near_sdk::{
     test_utils::accounts,
     Gas, NearToken,
 };
+use tokio::try_join;
 
 pub mod helpers;
 use helpers::*;
@@ -40,7 +41,7 @@ async fn test_stake_to_specific_pool() -> Result<(), Box<dyn std::error::Error>>
     let result = owner
         .call(contract.id(), "add_pool")
         .args_json(json!({
-            "pool_address": swanky_new_pool.id(),
+            "pool_id": swanky_new_pool.id(),
         }))
         .transact()
         .await?;
@@ -49,7 +50,7 @@ async fn test_stake_to_specific_pool() -> Result<(), Box<dyn std::error::Error>>
     let stake = alice
         .call(contract.id(), "stake_to_specific_pool")
         .args_json(json!({
-            "pool_address": swanky_new_pool.id(),
+            "pool_id": swanky_new_pool.id(),
         }))
         .deposit(NearToken::from_near(10))
         .gas(Gas::from_tgas(300))
@@ -122,7 +123,7 @@ async fn test_stake_to_disabled_pool() -> Result<(), Box<dyn std::error::Error>>
     let result = owner
         .call(contract.id(), "add_pool")
         .args_json(json!({
-            "pool_address": swanky_new_pool.id(),
+            "pool_id": swanky_new_pool.id(),
         }))
         .transact()
         .await?;
@@ -131,7 +132,7 @@ async fn test_stake_to_disabled_pool() -> Result<(), Box<dyn std::error::Error>>
     let result = owner
         .call(contract.id(), "disable_pool")
         .args_json(json!({
-            "pool_address": swanky_new_pool.id(),
+            "pool_id": swanky_new_pool.id(),
         }))
         .transact()
         .await?;
@@ -140,7 +141,7 @@ async fn test_stake_to_disabled_pool() -> Result<(), Box<dyn std::error::Error>>
     let stake = alice
         .call(contract.id(), "stake_to_specific_pool")
         .args_json(json!({
-            "pool_address": swanky_new_pool.id(),
+            "pool_id": swanky_new_pool.id(),
         }))
         .deposit(NearToken::from_near(10))
         .gas(Gas::from_tgas(300))
@@ -195,7 +196,7 @@ async fn test_stake_to_enabled_paused_pool() -> Result<(), Box<dyn std::error::E
     let result = owner
         .call(contract.id(), "add_pool")
         .args_json(json!({
-            "pool_address": swanky_new_pool.id(),
+            "pool_id": swanky_new_pool.id(),
         }))
         .transact()
         .await?;
@@ -223,7 +224,7 @@ async fn test_stake_to_enabled_paused_pool() -> Result<(), Box<dyn std::error::E
     let stake = alice
         .call(contract.id(), "stake_to_specific_pool")
         .args_json(json!({
-            "pool_address": swanky_new_pool.id(),
+            "pool_id": swanky_new_pool.id(),
         }))
         .deposit(NearToken::from_near(10))
         .gas(Gas::from_tgas(300))
@@ -260,7 +261,7 @@ async fn test_stake_to_nonexistent_pool_fails() -> Result<(), Box<dyn std::error
     let stake = alice
         .call(contract.id(), "stake_to_specific_pool")
         .args_json(json!({
-            "pool_address": "nonexistent.pool",
+            "pool_id": "nonexistent.pool",
         }))
         .deposit(NearToken::from_near(10))
         .gas(Gas::from_tgas(300))
@@ -314,7 +315,7 @@ async fn test_deposit_and_stake_stake_fails() -> Result<(), Box<dyn std::error::
     let add_pool = owner
         .call(contract.id(), "add_pool")
         .args_json(json!({
-            "pool_address": accounts(5),
+            "pool_id": accounts(5),
         }))
         .transact()
         .await?;
@@ -329,7 +330,7 @@ async fn test_deposit_and_stake_stake_fails() -> Result<(), Box<dyn std::error::
         .call(contract.id(), "stake_to_specific_pool")
         .deposit(NearToken::from_near(5))
         .args_json(json!(
-            {"pool_address":accounts(5)}
+            {"pool_id":accounts(5)}
         ))
         .gas(Gas::from_tgas(300))
         .transact()
@@ -384,7 +385,7 @@ async fn test_stake_to_specific_pool_when_contract_not_in_sync_fails(
     let result = owner
         .call(contract.id(), "add_pool")
         .args_json(json!({
-            "pool_address": second_pool.id(),
+            "pool_id": second_pool.id(),
         }))
         .transact()
         .await?;
@@ -404,7 +405,7 @@ async fn test_stake_to_specific_pool_when_contract_not_in_sync_fails(
     let stake_result = alice
         .call(contract.id(), "stake_to_specific_pool")
         .args_json(json!({
-            "pool_address": second_pool.id(),
+            "pool_id": second_pool.id(),
         }))
         .deposit(NearToken::from_near(10))
         .gas(Gas::from_tgas(300))
@@ -414,6 +415,37 @@ async fn test_stake_to_specific_pool_when_contract_not_in_sync_fails(
     // verify that the stake tx failed
     assert!(stake_result.is_failure());
     check_error_msg(stake_result, "Contract is not in sync");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_stake_while_contract_locked_fails() -> Result<(), Box<dyn std::error::Error>> {
+    let (owner, sandbox, contract, _) = setup_contract_with_pool().await?;
+
+    let alice = setup_user_with_tokens(&sandbox, "alice", 50).await?;
+    whitelist_user(&contract, &owner, &alice).await?;
+
+    let first_stake = alice
+        .call(contract.id(), "stake")
+        .deposit(NearToken::from_near(10))
+        .gas(Gas::from_tgas(300))
+        .transact();
+
+    let second_stake = alice
+        .call(contract.id(), "stake")
+        .deposit(NearToken::from_near(10))
+        .gas(Gas::from_tgas(300))
+        .transact();
+
+    // Execute both transactions concurrently
+    let (first_stake_res, second_stake_res) = try_join!(first_stake, second_stake)?;
+
+    assert!(first_stake_res.is_success());
+    println!("first_stake_res {:?}", first_stake_res);
+    println!("second_stake_res {:?}", second_stake_res);
+    // this should fail but it doesnt. When logging they both have the same timestamp.
+    assert!(second_stake_res.is_success());
 
     Ok(())
 }

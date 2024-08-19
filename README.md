@@ -41,6 +41,10 @@ Pools can be disabled but not deleted.
 The contract is pausable which allows an admin, called the owner, to temporarily prevent anyone from interacting with the contract.  
 This is useful in case of an emergency where the contract needs to be stopped while a remediation is pending.
 
+### Lock flag
+
+Methods requiring cross-contract calls use a locking mechanism to prevent re-entrancy attacks and/or common values from being modified out of order. 
+
 ### 2-step owner
 
 Replacing the owner is a two-step process, where the new owner account is added as pending and it has to be claimed by the new owner to complete the transfer of ownership.  

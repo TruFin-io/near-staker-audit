@@ -158,7 +158,7 @@ async fn test_total_staked_and_share_price_increase_with_paused_pool(
 
     // verify that the initial share price is 1
     let share_price = get_share_price(contract.clone()).await?;
-    assert_eq!(share_price, 1 * SHARE_PRICE_SCALING_FACTOR);
+    assert_eq!(share_price, SHARE_PRICE_SCALING_FACTOR);
 
     // alice stakes 12 NEAR to the paused pool
     let _ = stake(&contract, alice.clone(), 12).await?;
@@ -333,7 +333,7 @@ async fn test_get_latest_unstake_nonce_increases_with_unstake(
     let result = owner
         .call(contract.id(), "add_pool")
         .args_json(json!({
-            "pool_address": swanky_new_pool.id(),
+            "pool_id": swanky_new_pool.id(),
         }))
         .transact()
         .await?;
@@ -342,7 +342,7 @@ async fn test_get_latest_unstake_nonce_increases_with_unstake(
     let stake = alice
         .call(contract.id(), "stake_to_specific_pool")
         .args_json(json!({
-            "pool_address": swanky_new_pool.id(),
+            "pool_id": swanky_new_pool.id(),
         }))
         .deposit(NearToken::from_near(10))
         .gas(Gas::from_tgas(300))
@@ -353,7 +353,7 @@ async fn test_get_latest_unstake_nonce_increases_with_unstake(
     let unstake = alice
         .call(contract.id(), "unstake_from_specific_pool")
         .args_json(json!({
-            "pool_address": swanky_new_pool.id(),
+            "pool_id": swanky_new_pool.id(),
             "amount": U128::from(2 * ONE_NEAR),
         }))
         .deposit(NearToken::from_near(1))
@@ -368,7 +368,7 @@ async fn test_get_latest_unstake_nonce_increases_with_unstake(
     let unstake = alice
         .call(contract.id(), "unstake_from_specific_pool")
         .args_json(json!({
-            "pool_address": swanky_new_pool.id(),
+            "pool_id": swanky_new_pool.id(),
             "amount": U128::from(2 * ONE_NEAR),
         }))
         .deposit(NearToken::from_near(1))
@@ -508,7 +508,7 @@ async fn test_is_claimable_from_disabled_validator() -> Result<(), Box<dyn std::
     let result = owner
         .call(contract.id(), "add_pool")
         .args_json(json!({
-            "pool_address": swanky_new_pool.id(),
+            "pool_id": swanky_new_pool.id(),
         }))
         .transact()
         .await?;
@@ -517,7 +517,7 @@ async fn test_is_claimable_from_disabled_validator() -> Result<(), Box<dyn std::
     let stake = alice
         .call(contract.id(), "stake_to_specific_pool")
         .args_json(json!({
-            "pool_address": swanky_new_pool.id(),
+            "pool_id": swanky_new_pool.id(),
         }))
         .deposit(NearToken::from_near(10))
         .gas(Gas::from_tgas(300))
@@ -528,7 +528,7 @@ async fn test_is_claimable_from_disabled_validator() -> Result<(), Box<dyn std::
     let unstake = alice
         .call(contract.id(), "unstake_from_specific_pool")
         .args_json(json!({
-            "pool_address": swanky_new_pool.id(),
+            "pool_id": swanky_new_pool.id(),
             "amount": U128::from(2 * ONE_NEAR),
         }))
         .deposit(NearToken::from_near(1))
@@ -542,7 +542,7 @@ async fn test_is_claimable_from_disabled_validator() -> Result<(), Box<dyn std::
     let disabled_validator = owner
         .call(contract.id(), "disable_pool")
         .args_json(json!({
-            "pool_address": pool.id(),
+            "pool_id": pool.id(),
         }))
         .transact()
         .await?;
@@ -593,7 +593,7 @@ async fn test_get_pools() -> Result<(), Box<dyn std::error::Error>> {
     let result = owner
         .call(contract.id(), "add_pool")
         .args_json(json!({
-            "pool_address": pool_2.id(),
+            "pool_id": pool_2.id(),
         }))
         .transact()
         .await?;
@@ -610,14 +610,14 @@ async fn test_get_pools() -> Result<(), Box<dyn std::error::Error>> {
     assert!(pool_1.is_some());
     assert_eq!(pool_1.unwrap().state, ValidatorState::ENABLED);
     assert_eq!(pool_1.unwrap().total_staked, U128(0));
-    assert_eq!(pool_1.unwrap().unstake_available, true);
+    assert!(pool_1.unwrap().unstake_available);
     assert_eq!(pool_1.unwrap().next_unstake_epoch, epoch_height.into());
 
     let pool_2 = pools.iter().find(|p| &p.pool_id == pool_2.id());
     assert!(pool_2.is_some());
     assert_eq!(pool_2.unwrap().state, ValidatorState::ENABLED);
     assert_eq!(pool_2.unwrap().total_staked, U128(0));
-    assert_eq!(pool_2.unwrap().unstake_available, true);
+    assert!(pool_2.unwrap().unstake_available);
     assert_eq!(pool_2.unwrap().next_unstake_epoch, epoch_height.into());
 
     Ok(())
@@ -634,7 +634,7 @@ async fn test_get_pools_with_different_unstake_periods() -> Result<(), Box<dyn s
     let result = owner
         .call(contract.id(), "add_pool")
         .args_json(json!({
-            "pool_address": pool_2.id(),
+            "pool_id": pool_2.id(),
         }))
         .transact()
         .await?;
@@ -644,7 +644,7 @@ async fn test_get_pools_with_different_unstake_periods() -> Result<(), Box<dyn s
     let result = owner
         .call(contract.id(), "add_pool")
         .args_json(json!({
-            "pool_address": pool_3.id(),
+            "pool_id": pool_3.id(),
         }))
         .transact()
         .await?;
@@ -654,7 +654,7 @@ async fn test_get_pools_with_different_unstake_periods() -> Result<(), Box<dyn s
     let result = owner
         .call(contract.id(), "disable_pool")
         .args_json(json!({
-            "pool_address": pool_3.id(),
+            "pool_id": pool_3.id(),
         }))
         .transact()
         .await?;
@@ -666,7 +666,7 @@ async fn test_get_pools_with_different_unstake_periods() -> Result<(), Box<dyn s
     let stake_to_specific_pool = alice
         .call(contract.id(), "stake_to_specific_pool")
         .args_json(json!({
-            "pool_address": pool_2.id(),
+            "pool_id": pool_2.id(),
         }))
         .deposit(NearToken::from_near(10))
         .gas(Gas::from_tgas(300))
@@ -684,7 +684,7 @@ async fn test_get_pools_with_different_unstake_periods() -> Result<(), Box<dyn s
     let unstake_from_specific_pool = alice
         .call(contract.id(), "unstake_from_specific_pool")
         .args_json(json!({
-            "pool_address": pool_2.id(),
+            "pool_id": pool_2.id(),
             "amount": U128::from(5 * ONE_NEAR),
         }))
         .deposit(NearToken::from_near(1))
@@ -710,13 +710,13 @@ async fn test_get_pools_with_different_unstake_periods() -> Result<(), Box<dyn s
     assert!(pool_1.is_some());
     assert_eq!(pool_1.unwrap().state, ValidatorState::ENABLED);
     assert!(pool_1.unwrap().total_staked >= U128(5 * ONE_NEAR));
-    assert_eq!(pool_1.unwrap().unstake_available, true);
+    assert!(pool_1.unwrap().unstake_available);
     assert_eq!(pool_1.unwrap().next_unstake_epoch, epoch_height.into());
 
     assert!(pool_2.is_some());
     assert_eq!(pool_2.unwrap().state, ValidatorState::ENABLED);
     assert!(pool_2.unwrap().total_staked >= U128(5 * ONE_NEAR));
-    assert_eq!(pool_2.unwrap().unstake_available, false);
+    assert!(!pool_2.unwrap().unstake_available);
     assert_eq!(
         pool_2.unwrap().next_unstake_epoch,
         (epoch_height + 2).into()
@@ -724,8 +724,8 @@ async fn test_get_pools_with_different_unstake_periods() -> Result<(), Box<dyn s
 
     assert!(pool_3.is_some());
     assert_eq!(pool_3.unwrap().state, ValidatorState::DISABLED);
-    assert!(pool_3.unwrap().total_staked < U128(1 * ONE_NEAR));
-    assert_eq!(pool_3.unwrap().unstake_available, true);
+    assert!(pool_3.unwrap().total_staked < U128(ONE_NEAR));
+    assert!(pool_3.unwrap().unstake_available);
     assert_eq!(pool_3.unwrap().next_unstake_epoch, epoch_height.into());
 
     Ok(())

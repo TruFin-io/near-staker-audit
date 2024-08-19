@@ -35,11 +35,11 @@ async fn test_withdraw() -> Result<(), Box<dyn std::error::Error>> {
     let fees = NearToken::from_millinear(5);
 
     // storage costs should be refunded during the withdraw
-    let storage_cost: NearToken = contract.view("get_storage_cost").await?.json().unwrap();
+    let storage_cost: U128 = contract.view("get_storage_cost").await?.json().unwrap();
 
     assert!(
         alice.view_account().await?.balance.as_yoctonear() - pre_balance.as_yoctonear()
-            >= 2 * ONE_NEAR + storage_cost.as_yoctonear() - fees.as_yoctonear()
+            >= 2 * ONE_NEAR + storage_cost.0 - fees.as_yoctonear()
     );
     Ok(())
 }
@@ -75,10 +75,10 @@ async fn test_withdraw_with_pre_unstake() -> Result<(), Box<dyn std::error::Erro
 
     let fees = NearToken::from_millinear(5);
     // storage costs should be refunded during the withdraw
-    let storage_cost: NearToken = contract.view("get_storage_cost").await?.json().unwrap();
+    let storage_cost: U128 = contract.view("get_storage_cost").await?.json().unwrap();
     assert!(
         alice.view_account().await?.balance.as_yoctonear() - pre_balance.as_yoctonear()
-            >= 2 * ONE_NEAR + storage_cost.as_yoctonear() - fees.as_yoctonear()
+            >= 2 * ONE_NEAR + storage_cost.0 - fees.as_yoctonear()
     );
     Ok(())
 }
@@ -93,7 +93,7 @@ async fn test_withdraw_no_money_is_transferred_if_withdraw_fails(
     let add_pool = owner
         .call(contract.id(), "add_pool")
         .args_json(json!({
-            "pool_address": second_pool.id(),
+            "pool_id": second_pool.id(),
         }))
         .transact()
         .await?;
@@ -106,7 +106,7 @@ async fn test_withdraw_no_money_is_transferred_if_withdraw_fails(
         .call(contract.id(), "stake_to_specific_pool")
         .deposit(NearToken::from_near(5))
         .args_json(json!({
-            "pool_address": second_pool.id()
+            "pool_id": second_pool.id()
         }))
         .gas(Gas::from_tgas(300))
         .transact()
@@ -117,7 +117,7 @@ async fn test_withdraw_no_money_is_transferred_if_withdraw_fails(
         .call(contract.id(), "unstake_from_specific_pool")
         .args_json(json!(
             {"amount": U128::from(2 * ONE_NEAR),
-            "pool_address": second_pool.id()}
+            "pool_id": second_pool.id()}
         ))
         .deposit(NearToken::from_near(1))
         .gas(Gas::from_tgas(300))
@@ -135,6 +135,7 @@ async fn test_withdraw_no_money_is_transferred_if_withdraw_fails(
         .await?;
 
     let pre_balance = alice.view_account().await?.balance;
+    let pre_staker_balance = contract.view_account().await?.balance;
 
     let withdraw = alice
         .call(contract.id(), "withdraw")
@@ -144,13 +145,17 @@ async fn test_withdraw_no_money_is_transferred_if_withdraw_fails(
         .gas(Gas::from_tgas(300))
         .transact()
         .await?;
-    // The withdraw will fail
-    assert!(withdraw.is_failure());
+    // The withdraw will succeed, but nothing will be withdrawn
+    assert!(withdraw.is_success());
 
     let fees = NearToken::from_millinear(5);
     assert!(
         pre_balance.as_yoctonear() - alice.view_account().await?.balance.as_yoctonear()
             <= fees.as_yoctonear()
+    );
+    assert!(
+        contract.view_account().await?.balance.as_yoctonear() - pre_staker_balance.as_yoctonear()
+            < fees.as_yoctonear()
     );
     Ok(())
 }
@@ -420,10 +425,10 @@ async fn test_withdraw_withdraws_all() -> Result<(), Box<dyn std::error::Error>>
     );
 
     // storage costs should be refunded during the withdraw
-    let storage_cost: NearToken = contract.view("get_storage_cost").await?.json().unwrap();
+    let storage_cost: U128 = contract.view("get_storage_cost").await?.json().unwrap();
     assert!(
         alice.view_account().await?.balance.as_yoctonear() - pre_balance_alice
-            >= 2 * ONE_NEAR + storage_cost.as_yoctonear() - fees.as_yoctonear()
+            >= 2 * ONE_NEAR + storage_cost.0 - fees.as_yoctonear()
     );
     Ok(())
 }

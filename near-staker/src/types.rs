@@ -92,6 +92,6 @@ pub(crate) struct DistributionInfo {
 pub struct UnstakeRequest {
     pub user: AccountId,
     pub near_amount: u128,
-    pub pool_address: AccountId,
+    pub pool_id: AccountId,
     pub epoch: u64,
 }

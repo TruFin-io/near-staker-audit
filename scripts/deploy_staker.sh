@@ -46,7 +46,7 @@ print_success() {
 add_pool() {
   local delegation_pool=$1
 
-  near call $STAKER add_pool "{\"pool_address\": \"$delegation_pool\"}" --accountId $OWNER_ID --gas 300000000000000
+  near call $STAKER add_pool "{\"pool_id\": \"$delegation_pool\"}" --accountId $OWNER_ID --gas 300000000000000
   if [ $? -ne 0 ]; then
     print_error "Failed to add pool $delegation_pool"
     exit $?

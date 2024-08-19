@@ -1,4 +1,5 @@
 use super::*;
+use crate::math::*;
 use near_sdk::test_utils::{accounts, get_logs, VMContextBuilder};
 use near_sdk::{testing_env, AccountId};
 use std::any::Any;
@@ -921,13 +922,13 @@ fn test_internal_calculate_distribution_amount_with_large_share_price() {
 }
 
 #[test]
-fn test_checked_sub() {
-    let result = checked_sub(20000000000000000000000000, 19999999999999999999999999);
+fn test_saturating_sub() {
+    let result = 20000000000000000000000000u128.saturating_sub(19999999999999999999999999u128);
     assert_eq!(result, 1);
 }
 
 #[test]
-fn test_checked_sub_with_overflow() {
-    let result = checked_sub(19999999999999999999999999, 20000000000000000000000000);
+fn test_saturating_sub_with_overflow() {
+    let result = 19999999999999999999999999u128.saturating_sub(20000000000000000000000000u128);
     assert_eq!(result, 0);
 }

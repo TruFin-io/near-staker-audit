@@ -1224,15 +1224,8 @@ async fn test_calculate_distribute_amounts_in_trunear() -> Result<(), Box<dyn st
     let _ = move_epoch_forward_and_update_total_staked(&sandbox, &contract, owner.clone()).await;
 
     // get the required trunear amounts for the distribute_all call
-    let (required_trunear, required_near) = contract
-        .view("get_rewards_distribution_amounts")
-        .args_json(json!({
-            "distributor": alice.id(),
-            "in_near": false,
-        }))
-        .await?
-        .json::<(u128, u128)>()
-        .unwrap();
+    let (required_trunear, required_near) =
+        calculate_distribute_amounts(&contract, alice.id(), false).await?;
 
     // calculate the expected distribution amounts
     let (share_price_num, share_price_denom) = share_price_fraction(&contract).await?;
@@ -1277,15 +1270,8 @@ async fn test_calculate_distribute_amounts_in_near() -> Result<(), Box<dyn std::
     let _ = move_epoch_forward_and_update_total_staked(&sandbox, &contract, owner.clone()).await;
 
     // get the required near amounts for the distribute_all call
-    let (required_trunear, required_near) = contract
-        .view("get_rewards_distribution_amounts")
-        .args_json(json!({
-            "distributor": alice.id(),
-            "in_near": true,
-        }))
-        .await?
-        .json::<(u128, u128)>()
-        .unwrap();
+    let (required_trunear, required_near) =
+        calculate_distribute_amounts(&contract, alice.id(), true).await?;
 
     // calculate the expected distribution amounts
     let (share_price_num, share_price_denom) = share_price_fraction(&contract).await?;
@@ -1332,28 +1318,14 @@ async fn test_calculate_distribute_amounts_with_no_allocations(
     let _ = move_epoch_forward_and_update_total_staked(&sandbox, &contract, owner.clone()).await;
 
     // get the required distribute_all amounts for an account with no allocations
-    let (required_trunear, required_near) = contract
-        .view("get_rewards_distribution_amounts")
-        .args_json(json!({
-            "distributor": accounts(5),
-            "in_near": false,
-        }))
-        .await?
-        .json::<(u128, u128)>()
-        .unwrap();
+    let (required_trunear, required_near) =
+        calculate_distribute_amounts(&contract, &charlie, true).await?;
 
     assert_eq!(required_trunear, 0);
     assert_eq!(required_near, 0);
 
-    let (required_trunear, required_near) = contract
-        .view("get_rewards_distribution_amounts")
-        .args_json(json!({
-            "distributor": accounts(5),
-            "in_near": true,
-        }))
-        .await?
-        .json::<(u128, u128)>()
-        .unwrap();
+    let (required_trunear, required_near) =
+        calculate_distribute_amounts(&contract, &charlie, true).await?;
     assert_eq!(required_trunear, 0);
     assert_eq!(required_near, 0);
 
@@ -1379,15 +1351,8 @@ async fn test_calculate_distribute_amounts_with_fees() -> Result<(), Box<dyn std
     let _ = move_epoch_forward_and_update_total_staked(&sandbox, &contract, owner.clone()).await;
 
     // get the required near amounts for the distribute_all call
-    let (required_trunear, required_near) = contract
-        .view("get_rewards_distribution_amounts")
-        .args_json(json!({
-            "distributor": alice.id(),
-            "in_near": true,
-        }))
-        .await?
-        .json::<(u128, u128)>()
-        .unwrap();
+    let (required_trunear, required_near) =
+        calculate_distribute_amounts(&contract, alice.id(), true).await?;
 
     // calculate the expected distribution amounts
     let (share_price_num, share_price_denom) = share_price_fraction(&contract).await?;
@@ -1472,7 +1437,7 @@ async fn test_distribute_all_with_insufficient_gas_does_not_emit_events(
 
     // verify that no event is emitted
     let events_json = get_events(distribution.logs());
-    assert!(events_json.len() == 0);
+    assert!(events_json.is_empty());
 
     Ok(())
 }

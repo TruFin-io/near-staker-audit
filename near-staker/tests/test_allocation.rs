@@ -225,7 +225,7 @@ async fn test_allocate_to_same_person_twice_same_share_price(
     assert_eq!(
         U256::from_dec_str(&allocation[0].share_price_num).unwrap()
             / U256::from_dec_str(&allocation[0].share_price_denom).unwrap(),
-        U256::from(SHARE_PRICE_SCALING_FACTOR / 1)
+        U256::from(SHARE_PRICE_SCALING_FACTOR)
     );
 
     Ok(())
@@ -349,10 +349,10 @@ async fn test_allocate_refunds_excess_deposit() -> Result<(), Box<dyn std::error
     assert!(result.is_success());
 
     let fees = NearToken::from_millinear(2);
-    let storage_cost: NearToken = contract.view("get_storage_cost").await?.json().unwrap();
+    let storage_cost: U128 = contract.view("get_storage_cost").await?.json().unwrap();
     assert!(
         alice.view_account().await?.balance.as_yoctonear()
-            > pre_balance.as_yoctonear() - fees.as_yoctonear() - storage_cost.as_yoctonear()
+            > pre_balance.as_yoctonear() - fees.as_yoctonear() - storage_cost.0
     );
     Ok(())
 }
@@ -406,7 +406,7 @@ async fn test_total_allocated_for_user_with_one_allocation(
     let _ = increase_total_staked(&contract, &owner, "user_name", 100).await?;
     move_epoch_forward_and_update_total_staked(&sandbox, &contract, owner.clone()).await?;
     let share_price = get_share_price(contract.clone()).await?;
-    assert!(share_price > 1 * SHARE_PRICE_SCALING_FACTOR);
+    assert!(share_price > SHARE_PRICE_SCALING_FACTOR);
 
     // alice allocates at current share price
     let allocation_amount = 123 * ONE_NEAR;
@@ -449,7 +449,7 @@ async fn test_total_allocated_for_user_with_many_allocation_at_same_price(
     let _ = increase_total_staked(&contract, &owner, "user_name", 100).await?;
     move_epoch_forward_and_update_total_staked(&sandbox, &contract, owner.clone()).await?;
     let share_price = get_share_price(contract.clone()).await?;
-    assert!(share_price > 1 * SHARE_PRICE_SCALING_FACTOR);
+    assert!(share_price > SHARE_PRICE_SCALING_FACTOR);
 
     let first_allocation_amount = 123 * ONE_NEAR;
     setup_allocation(&alice, &accounts(3), first_allocation_amount, contract.id()).await?;

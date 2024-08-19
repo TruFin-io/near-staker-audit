@@ -23,6 +23,11 @@ impl NearStaker {
         require!(!self.is_paused, ERR_PAUSED);
     }
 
+    /// Checks that the contract is not currently executing a cross contract call.
+    pub(crate) fn check_not_locked(&self) {
+        require!(!self.is_locked, ERR_LOCKED);
+    }
+
     /// Checks that the caller is the owner of the contract.
     pub(crate) fn check_owner(&self) {
         require!(
@@ -45,10 +50,10 @@ impl NearStaker {
     }
 
     /// Checks that the chosen delegation pool exists and is enabled.
-    pub(crate) fn check_pool(&self, pool_address: AccountId) {
+    pub(crate) fn check_pool(&self, pool_id: AccountId) {
         let pool = self
             .delegation_pools
-            .get(&pool_address)
+            .get(&pool_id)
             .expect(ERR_POOL_DOES_NOT_EXIST);
         require!(pool.state == ValidatorState::ENABLED, ERR_POOL_NOT_ENABLED);
     }
@@ -66,33 +71,31 @@ impl NearStaker {
     /// Stakes the specified amount of NEAR tokens into the specified delegation pool.
     pub(crate) fn internal_deposit_and_stake(
         &mut self,
-        pool_address: AccountId,
+        pool_id: AccountId,
         amount: u128,
         caller: AccountId,
     ) -> Promise {
-        self.check_pool(pool_address.clone());
+        self.check_pool(pool_id.clone());
 
         self.check_min_deposit_amount(amount);
 
         self.check_contract_in_sync();
 
-        Self::send_stake_promises(pool_address, amount, caller)
+        Self::send_stake_promises(pool_id, amount, caller)
     }
 
     /// Sends the stake promises to the staking pool upon user deposit.
     pub(crate) fn send_stake_promises(
-        pool_address: AccountId,
+        pool_id: AccountId,
         amount: u128,
         caller: AccountId,
     ) -> Promise {
         let staker_id: AccountId = env::current_account_id();
 
-        let staker_arg = json!({ "account_id": staker_id.clone() })
-            .to_string()
-            .into_bytes();
+        let staker_arg = json!({ "account_id": staker_id }).to_string().into_bytes();
 
         // we first call deposit_and_stake followed by get_account_total_balance to ensure the stake has been added
-        Promise::new(pool_address.clone())
+        Promise::new(pool_id.clone())
             .function_call(
                 "deposit_and_stake".to_owned(),
                 NO_ARGS,
@@ -101,21 +104,21 @@ impl NearStaker {
             )
             .function_call(
                 "get_account_total_balance".to_owned(),
-                staker_arg.to_owned(),
+                staker_arg,
                 NO_DEPOSIT,
                 XCC_GAS,
             )
             .then(
                 Self::ext(env::current_account_id())
                     .with_static_gas(XCC_GAS)
-                    .finalize_deposit_and_stake(pool_address, U128(amount), caller),
+                    .finalize_deposit_and_stake(pool_id, U128(amount), caller),
             )
     }
 
     /// Unstakes NEAR from the specified pool, withdrawing first if necessary.
     pub(crate) fn send_unstake_promises(
         &mut self,
-        pool_address: AccountId,
+        pool_id: AccountId,
         amount: u128,
         caller: AccountId,
         attached_near: NearToken,
@@ -130,7 +133,7 @@ impl NearStaker {
 
         let shares_amount =
             Self::convert_to_shares(amount, share_price_num, share_price_denom, false);
-        if shares_amount <= 0 {
+        if shares_amount == 0 {
             log!("Failed to unstake: {}", ERR_UNSTAKE_AMOUNT_TOO_LOW);
             return Promise::new(caller).transfer(attached_near);
         }
@@ -148,11 +151,11 @@ impl NearStaker {
             .into_bytes();
 
         let pre_unstake_staker_balance = env::account_balance();
-        let mut promise = Promise::new(pool_address.clone());
+        let mut promise = Promise::new(pool_id.clone());
 
         // we fetch the total amount requested for unstake on the given pool and last unstake epoch as we should withdraw
         // any unlocked stake into the staker before unlocking more due to the 4 epoch wait period
-        let pool_info = self.delegation_pools.get(&pool_address).unwrap();
+        let pool_info = self.delegation_pools.get(&pool_id).unwrap();
         let mut withdraw_occurred: bool = false;
 
         if let Some(last_unstake) = pool_info.last_unstake {
@@ -185,7 +188,7 @@ impl NearStaker {
             Self::ext(env::current_account_id())
                 .with_static_gas(XCC_GAS)
                 .finalize_unstake(
-                    pool_address,
+                    pool_id,
                     U128(amount),
                     caller,
                     pre_unstake_staker_balance,
@@ -201,7 +204,7 @@ impl NearStaker {
     /// Unstakes the specified amount of NEAR tokens from the specified delegation pool.
     pub(crate) fn internal_unstake(
         &mut self,
-        pool_address: AccountId,
+        pool_id: AccountId,
         amount: u128,
         caller: AccountId,
     ) -> Promise {
@@ -209,17 +212,13 @@ impl NearStaker {
 
         let attached_near = env::attached_deposit();
         require!(
-            attached_near >= Self::get_storage_cost(),
+            attached_near.as_yoctonear() >= Self::get_storage_cost().0,
             ERR_STORAGE_DEPOSIT_TOO_SMALL
         );
 
         // We must check that there is no pending unstake from previous epochs on the pool. If there is, we cannot unlock as
         // it would push back the pending unstake by a further four epochs.
-        let pool_last_unstake = self
-            .delegation_pools
-            .get(&pool_address)
-            .unwrap()
-            .last_unstake;
+        let pool_last_unstake = self.delegation_pools.get(&pool_id).unwrap().last_unstake;
         let current_epoch = env::epoch_height();
 
         // we can unlock if the last unstake happened in the same epoch or more than 4 epochs ago (there is withdrawable stake)
@@ -232,25 +231,20 @@ impl NearStaker {
         }
 
         // if the total staked is up to date, check the requested unstake amount
-        match self.internal_check_unstake_amount(&pool_address, amount, &caller) {
-            Err(error) => {
-                env::panic_str(&error.to_string());
-            }
-            Ok(amount) => self.send_unstake_promises(pool_address, amount, caller, attached_near),
-        }
+        let amount = self.internal_check_unstake_amount(&pool_id, amount, &caller);
+
+        self.send_unstake_promises(pool_id, amount, caller, attached_near)
     }
 
     /// Updates the total staked amount.   
     pub(crate) fn internal_update_stake(&self) -> Promise {
         let staker_id = env::current_account_id();
-        let staker_arg = json!({ "account_id": staker_id.clone() })
-            .to_string()
-            .into_bytes();
+        let staker_arg = json!({ "account_id": staker_id }).to_string().into_bytes();
 
         // For each pool, we first call ping on each pool to ensure the pool is synced and up to date.
         // We then fetch the staked + unstaked (total) balance of our staker on the pool.
-        let combined_promises = self.delegation_pools_list.iter().flat_map(|pool_address| {
-            vec![Promise::new(pool_address.clone())
+        let combined_promises = self.delegation_pools_list.iter().flat_map(|pool_id| {
+            vec![Promise::new(pool_id.clone())
                 .function_call("ping".to_owned(), NO_ARGS, NO_DEPOSIT, XCC_GAS)
                 .function_call(
                     "get_account_total_balance".to_owned(),
@@ -268,9 +262,9 @@ impl NearStaker {
         let sender = env::predecessor_account_id();
         // we first perform checks on the unlock request before withdrawing anything
         let UnstakeRequest {
-            pool_address,
+            pool_id,
             user,
-            near_amount: _,
+            near_amount,
             epoch,
         } = self
             .unstake_requests
@@ -283,7 +277,7 @@ impl NearStaker {
             ERR_WITHDRAW_NOT_READY
         );
 
-        let pool_info = self.delegation_pools.get(pool_address).unwrap();
+        let pool_info = self.delegation_pools.get(pool_id).unwrap();
 
         // we first check if there is stake to be withdrawn from the pool
         // and if there is, if the last unstake happened four or more epochs ago, as otherwise it is
@@ -296,16 +290,14 @@ impl NearStaker {
             let amount_args = json!({ "amount": pool_info.total_unstaked})
                 .to_string()
                 .into_bytes();
-            let staker_arg = json!({ "account_id": staker_id.clone() })
-                .to_string()
-                .into_bytes();
+            let staker_arg = json!({ "account_id": staker_id }).to_string().into_bytes();
 
             return Some(
-                Promise::new(pool_address.clone())
+                Promise::new(pool_id.clone())
                     .function_call("withdraw".to_owned(), amount_args, NO_DEPOSIT, XCC_GAS)
                     .function_call(
                         "get_account_unstaked_balance".to_owned(),
-                        staker_arg.clone(),
+                        staker_arg,
                         NO_DEPOSIT,
                         VIEW_GAS,
                     )
@@ -315,17 +307,19 @@ impl NearStaker {
                             .withdraw_callback(
                                 unstake_nonce,
                                 pool_info.total_unstaked,
-                                pool_address.clone(),
+                                pool_id.clone(),
                                 env::account_balance(),
+                                U128::from(*near_amount),
                             ),
                     ),
             );
         }
-
         // if there is nothing to withdraw (because it has already been withdrawn by previous withdrawals or unstakes)
         // we can finalize the withdraw
-        self.finalize_withdraw(unstake_nonce);
-        return None;
+        self.finalize_withdraw(unstake_nonce, U128::from(*near_amount));
+        // set locked flag to false as no cross-contract call was made
+        self.is_locked = false;
+        None
     }
 
     /// Calculates fees of the taxable amount and mints shares to the treasury.
@@ -337,7 +331,7 @@ impl NearStaker {
             self.fee,
         );
 
-        let taxable_amount = checked_sub(self.total_staked, self.tax_exempt_stake);
+        let taxable_amount = self.total_staked.saturating_sub(self.tax_exempt_stake);
 
         let near_amount_increase_treasury = mul_div_with_rounding(
             U256::from(taxable_amount),
@@ -348,7 +342,7 @@ impl NearStaker {
 
         log!(
             "NEAR collected as fees: {}",
-            near_amount_increase_treasury.clone().as_u128()
+            near_amount_increase_treasury.to_string()
         );
 
         let share_increase_treasury = Self::convert_to_shares(
@@ -362,23 +356,23 @@ impl NearStaker {
             // mint the shares to the treasury
             self.internal_mint(share_increase_treasury, self.treasury.clone());
 
+            // update tax exempt stake
+            self.tax_exempt_stake = self.total_staked;
+
             // emit FeesCollected event
             Event::FeesCollectedEvent {
                 shares_minted: &U128(share_increase_treasury),
-                treasury_balance: &U128(self.ft_balance_of(self.treasury.clone()).into()),
+                treasury_balance: &self.ft_balance_of(self.treasury.clone()),
                 share_price_num: &share_price_num.to_string(),
                 share_price_denom: &share_price_denom.to_string(),
                 epoch: &env::epoch_height().into(),
             }
             .emit();
         };
-
-        // update tax exempt stake
-        self.tax_exempt_stake = self.total_staked;
     }
 
     /// Mints an amount of TruNEAR tokens to a specified account.
-    pub(crate) fn internal_mint(self: &mut Self, shares_amount: u128, recipient: AccountId) {
+    pub(crate) fn internal_mint(&mut self, shares_amount: u128, recipient: AccountId) {
         let account_balance = self.token.accounts.get(&recipient).unwrap_or(0);
 
         self.token
@@ -397,7 +391,7 @@ impl NearStaker {
     }
 
     /// Burns an amount of TruNEAR tokens from a specified account.
-    pub(crate) fn internal_burn(self: &mut Self, shares_burned: u128, user: AccountId) {
+    pub(crate) fn internal_burn(&mut self, shares_burned: u128, user: AccountId) {
         let user_balance = self.token.accounts.get(&user).unwrap_or(0);
         require!(
             shares_burned <= user_balance,
@@ -502,7 +496,7 @@ impl NearStaker {
             shares_amount: shares_to_move,
             near_amount: near_amount.as_yoctonear(),
             refund_amount: refund_amount.as_yoctonear(),
-            fees: fees,
+            fees,
             share_price_num: allocation.share_price_num,
             share_price_denom: allocation.share_price_denom,
         }))
@@ -512,15 +506,16 @@ impl NearStaker {
     /// and returns the amount that will be unstaked.
     pub(crate) fn internal_check_unstake_amount(
         &self,
-        pool_address: &AccountId,
+        pool_id: &AccountId,
         amount: u128,
         caller: &AccountId,
-    ) -> Result<u128, Box<dyn std::error::Error>> {
+    ) -> u128 {
         // check if user has enough TruNEAR to unstake
         let max_withdraw = self.max_withdraw(caller.clone()).0;
-        if self.max_withdraw(caller.clone()) < U128(amount) {
-            return Err(ERR_INVALID_UNSTAKE_AMOUNT.into());
-        }
+        require!(
+            self.max_withdraw(caller.clone()) >= U128(amount),
+            ERR_INVALID_UNSTAKE_AMOUNT
+        );
 
         // if the user's remaining balance falls below one NEAR, unstake the entire user stake
         let unstake_amount = if max_withdraw - amount < ONE_NEAR {
@@ -530,37 +525,33 @@ impl NearStaker {
         };
 
         // check if there's enough staked balance to unstake on the pool
-        if self
-            .delegation_pools
-            .get(pool_address)
-            .unwrap()
-            .total_staked
-            < U128(unstake_amount)
-        {
-            return Err(ERR_INSUFFICIENT_FUNDS_ON_POOL.into());
-        }
+        require!(
+            self.delegation_pools.get(pool_id).unwrap().total_staked >= U128(unstake_amount),
+            ERR_INSUFFICIENT_FUNDS_ON_POOL
+        );
 
-        Ok(unstake_amount)
+        unstake_amount
     }
 
     /// Transfers the withdrawn NEAR to the user and emits the withdrawal event.
-    pub(crate) fn finalize_withdraw(&mut self, unstake_nonce: U128) {
+    pub(crate) fn finalize_withdraw(&mut self, unstake_nonce: U128, request_amount: U128) {
+        // checks that the contract has enough NEAR to withdraw. This should always be the case unless something very unexpected happened.
+        if self.withdrawn_amount < request_amount.0 {
+            log!("Failed to withdraw: {}", ERR_INSUFFICIENT_STAKER_BALANCE);
+            return;
+        }
+
+        self.withdrawn_amount -= request_amount.0;
+
         let UnstakeRequest {
-            pool_address,
+            pool_id,
             user,
             near_amount,
             epoch: _,
         } = self.unstake_requests.remove(&unstake_nonce.0).unwrap();
 
-        // checks that the contract has enough NEAR to withdraw. This should only fail if something unexpected happened.
-        require!(
-            self.withdrawn_amount >= near_amount,
-            ERR_INSUFFICIENT_STAKER_BALANCE
-        );
-        self.withdrawn_amount -= near_amount;
-
         // transfer the withdrawn NEAR plus storage costs to the user and update the contract balance
-        let total_transfer_amount = near_amount + Self::get_storage_cost().as_yoctonear();
+        let total_transfer_amount = near_amount + Self::get_storage_cost().0;
         Promise::new(user.clone()).transfer(NearToken::from_yoctonear(total_transfer_amount));
 
         Event::WithdrawalEvent {
@@ -568,7 +559,7 @@ impl NearStaker {
             amount: &near_amount.into(),
             unstake_nonce: &unstake_nonce,
             epoch: &env::epoch_height().into(),
-            delegation_pool: &pool_address,
+            delegation_pool: &pool_id,
         }
         .emit();
     }
@@ -586,7 +577,7 @@ impl NearStaker {
             return (U256::from(SHARE_PRICE_SCALING_FACTOR), U256::from(1));
         };
         // the taxable amount is the accrued rewards that we have not yet accounted for
-        let taxable_amount = checked_sub(total_staked, tax_exempt_stake);
+        let taxable_amount = total_staked.saturating_sub(tax_exempt_stake);
         // we then collect fees on the taxable amount and calculate the new total_staked; this ensures that when we mint shares
         // from fees to the treasury, the share price does not change
         let taxed_total_staked =

@@ -572,7 +572,7 @@ pub async fn stake_to_specific_pool(
     let stake = user
         .call(contract.id(), "stake_to_specific_pool")
         .args_json(json!({
-            "pool_address": pool_id,
+            "pool_id": pool_id,
         }))
         .deposit(NearToken::from_near(amount))
         .gas(Gas::from_tgas(300))
@@ -643,7 +643,7 @@ pub async fn increase_total_staked(
         .transact()
         .await?
         .unwrap();
-    whitelist_user(contract, &owner, &user).await?;
+    whitelist_user(contract, owner, &user).await?;
 
     let stake = user
         .call(contract.id(), "stake")
@@ -720,9 +720,9 @@ pub async fn calculate_distribute_to_recipient_in_near(
             "in_near": true,
         }))
         .await?
-        .json::<(u128, u128)>()
+        .json::<(U128, U128)>()
         .unwrap();
-    Ok(response.1)
+    Ok(response.1 .0)
 }
 
 pub async fn calculate_distribute_amounts(
@@ -737,9 +737,9 @@ pub async fn calculate_distribute_amounts(
             "in_near": in_near,
         }))
         .await?
-        .json::<(u128, u128)>()
+        .json::<(U128, U128)>()
         .unwrap();
-    Ok(response)
+    Ok((response.0 .0, response.1 .0))
 }
 
 pub async fn register_account(

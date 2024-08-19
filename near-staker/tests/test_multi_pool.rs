@@ -16,7 +16,7 @@ async fn test_add_pool() -> Result<(), Box<dyn std::error::Error>> {
     let result = owner
         .call(contract.id(), "add_pool")
         .args_json(json!({
-            "pool_address": pool.id(),
+            "pool_id": pool.id(),
         }))
         .transact()
         .await?;
@@ -30,7 +30,7 @@ async fn test_add_pool() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap();
     let event_json: serde_json::Value = serde_json::from_str(&event_log[11..]).unwrap();
     assert_eq!(event_json["event"], "delegation_pool_added_event");
-    assert_eq!(event_json["data"][0]["pool_address"], pool.id().to_string());
+    assert_eq!(event_json["data"][0]["pool_id"], pool.id().to_string());
 
     Ok(())
 }
@@ -43,7 +43,7 @@ async fn test_add_pool_with_non_owner_fails() -> Result<(), Box<dyn std::error::
     let result = pool
         .call(contract.id(), "add_pool")
         .args_json(json!({
-            "pool_address": pool.id(),
+            "pool_id": pool.id(),
         }))
         .transact()
         .await?;
@@ -62,7 +62,7 @@ async fn test_add_pool_twice_fails() -> Result<(), Box<dyn std::error::Error>> {
     let result = owner
         .call(contract.id(), "add_pool")
         .args_json(json!({
-            "pool_address": pool.id(),
+            "pool_id": pool.id(),
         }))
         .transact()
         .await?;
@@ -71,7 +71,7 @@ async fn test_add_pool_twice_fails() -> Result<(), Box<dyn std::error::Error>> {
     let result = owner
         .call(contract.id(), "add_pool")
         .args_json(json!({
-            "pool_address": pool.id(),
+            "pool_id": pool.id(),
         }))
         .transact()
         .await?;
@@ -89,7 +89,7 @@ async fn test_disable_enabled_pool() -> Result<(), Box<dyn std::error::Error>> {
     let result = owner
         .call(contract.id(), "add_pool")
         .args_json(json!({
-            "pool_address": pool.id(),
+            "pool_id": pool.id(),
         }))
         .transact()
         .await?;
@@ -98,7 +98,7 @@ async fn test_disable_enabled_pool() -> Result<(), Box<dyn std::error::Error>> {
     let result = owner
         .call(contract.id(), "disable_pool")
         .args_json(json!({
-            "pool_address": pool.id(),
+            "pool_id": pool.id(),
         }))
         .transact()
         .await?;
@@ -113,7 +113,7 @@ async fn test_disable_enabled_pool() -> Result<(), Box<dyn std::error::Error>> {
     let event_json: serde_json::Value = serde_json::from_str(&event_log[11..]).unwrap();
 
     assert_eq!(event_json["event"], "delegation_pool_state_changed_event");
-    assert_eq!(event_json["data"][0]["pool_address"], pool.id().to_string());
+    assert_eq!(event_json["data"][0]["pool_id"], pool.id().to_string());
     assert_eq!(event_json["data"][0]["old_state"], "ENABLED");
     assert_eq!(event_json["data"][0]["new_state"], "DISABLED");
 
@@ -128,7 +128,7 @@ async fn test_enabled_enabled_pool_fails() -> Result<(), Box<dyn std::error::Err
     let result = owner
         .call(contract.id(), "add_pool")
         .args_json(json!({
-            "pool_address": pool.id(),
+            "pool_id": pool.id(),
         }))
         .transact()
         .await?;
@@ -137,7 +137,7 @@ async fn test_enabled_enabled_pool_fails() -> Result<(), Box<dyn std::error::Err
     let result = owner
         .call(contract.id(), "enable_pool")
         .args_json(json!({
-            "pool_address": pool.id(),
+            "pool_id": pool.id(),
         }))
         .transact()
         .await?;
@@ -155,7 +155,7 @@ async fn test_enable_non_existent_pool_fails() -> Result<(), Box<dyn std::error:
     let result = owner
         .call(contract.id(), "enable_pool")
         .args_json(json!({
-            "pool_address": pool.id(),
+            "pool_id": pool.id(),
         }))
         .transact()
         .await?;
@@ -173,7 +173,7 @@ async fn test_enable_disabled_pool() -> Result<(), Box<dyn std::error::Error>> {
     let result = owner
         .call(contract.id(), "add_pool")
         .args_json(json!({
-            "pool_address": pool.id(),
+            "pool_id": pool.id(),
         }))
         .transact()
         .await?;
@@ -182,7 +182,7 @@ async fn test_enable_disabled_pool() -> Result<(), Box<dyn std::error::Error>> {
     let result = owner
         .call(contract.id(), "disable_pool")
         .args_json(json!({
-            "pool_address": pool.id(),
+            "pool_id": pool.id(),
         }))
         .transact()
         .await?;
@@ -191,7 +191,7 @@ async fn test_enable_disabled_pool() -> Result<(), Box<dyn std::error::Error>> {
     let result = owner
         .call(contract.id(), "enable_pool")
         .args_json(json!({
-            "pool_address": pool.id(),
+            "pool_id": pool.id(),
         }))
         .transact()
         .await?;
@@ -206,7 +206,7 @@ async fn test_enable_disabled_pool() -> Result<(), Box<dyn std::error::Error>> {
     let event_json: serde_json::Value = serde_json::from_str(&event_log[11..]).unwrap();
 
     assert_eq!(event_json["event"], "delegation_pool_state_changed_event");
-    assert_eq!(event_json["data"][0]["pool_address"], pool.id().to_string());
+    assert_eq!(event_json["data"][0]["pool_id"], pool.id().to_string());
     assert_eq!(event_json["data"][0]["old_state"], "DISABLED");
     assert_eq!(event_json["data"][0]["new_state"], "ENABLED");
 
@@ -221,7 +221,7 @@ async fn test_disable_disabled_pool_fails() -> Result<(), Box<dyn std::error::Er
     let result = owner
         .call(contract.id(), "add_pool")
         .args_json(json!({
-            "pool_address": pool.id(),
+            "pool_id": pool.id(),
         }))
         .transact()
         .await?;
@@ -230,7 +230,7 @@ async fn test_disable_disabled_pool_fails() -> Result<(), Box<dyn std::error::Er
     let result = owner
         .call(contract.id(), "disable_pool")
         .args_json(json!({
-            "pool_address": pool.id(),
+            "pool_id": pool.id(),
         }))
         .transact()
         .await?;
@@ -239,7 +239,7 @@ async fn test_disable_disabled_pool_fails() -> Result<(), Box<dyn std::error::Er
     let result = owner
         .call(contract.id(), "disable_pool")
         .args_json(json!({
-            "pool_address": pool.id(),
+            "pool_id": pool.id(),
         }))
         .transact()
         .await?;
@@ -257,7 +257,7 @@ async fn test_disable_non_existent_pool_fails() -> Result<(), Box<dyn std::error
     let result = owner
         .call(contract.id(), "disable_pool")
         .args_json(json!({
-            "pool_address": pool.id(),
+            "pool_id": pool.id(),
         }))
         .transact()
         .await?;
@@ -275,7 +275,7 @@ async fn test_disable_pool_with_non_owner_fails() -> Result<(), Box<dyn std::err
     let result = owner
         .call(contract.id(), "add_pool")
         .args_json(json!({
-            "pool_address": pool.id(),
+            "pool_id": pool.id(),
         }))
         .transact()
         .await?;
@@ -284,7 +284,7 @@ async fn test_disable_pool_with_non_owner_fails() -> Result<(), Box<dyn std::err
     let result = pool
         .call(contract.id(), "disable_pool")
         .args_json(json!({
-            "pool_address": pool.id(),
+            "pool_id": pool.id(),
         }))
         .transact()
         .await?;
@@ -302,7 +302,7 @@ async fn test_enable_pool_with_non_owner_fails() -> Result<(), Box<dyn std::erro
     let result = owner
         .call(contract.id(), "add_pool")
         .args_json(json!({
-            "pool_address": pool.id(),
+            "pool_id": pool.id(),
         }))
         .transact()
         .await?;
@@ -311,7 +311,7 @@ async fn test_enable_pool_with_non_owner_fails() -> Result<(), Box<dyn std::erro
     let result = pool
         .call(contract.id(), "enable_pool")
         .args_json(json!({
-            "pool_address": pool.id(),
+            "pool_id": pool.id(),
         }))
         .transact()
         .await?;
@@ -339,7 +339,7 @@ async fn test_get_pools_updated_total_staked() -> Result<(), Box<dyn std::error:
     let add_pool = owner
         .call(contract.id(), "add_pool")
         .args_json(json!({
-            "pool_address": pool_2.id(),
+            "pool_id": pool_2.id(),
         }))
         .transact()
         .await?;
@@ -387,7 +387,7 @@ async fn test_update_total_staked() -> Result<(), Box<dyn std::error::Error>> {
     let add_pool = owner
         .call(contract.id(), "add_pool")
         .args_json(json!({
-            "pool_address": pool_2.id(),
+            "pool_id": pool_2.id(),
         }))
         .transact()
         .await?;
@@ -425,7 +425,7 @@ async fn test_update_total_staked_multi_pool() -> Result<(), Box<dyn std::error:
     let add_pool = owner
         .call(contract.id(), "add_pool")
         .args_json(json!({
-            "pool_address": pool_2.id(),
+            "pool_id": pool_2.id(),
         }))
         .transact()
         .await?;
@@ -458,7 +458,7 @@ async fn test_update_total_staked_multi_pool() -> Result<(), Box<dyn std::error:
 
 #[tokio::test]
 async fn test_update_total_staked_with_failure() -> Result<(), Box<dyn std::error::Error>> {
-    let (owner, _sandbox, contract, pool) = setup_contract_with_pool().await?;
+    let (owner, sandbox, contract, pool) = setup_contract_with_pool().await?;
 
     // stake 5 NEAR with the pool
     let stake = contract
@@ -485,7 +485,7 @@ async fn test_update_total_staked_with_failure() -> Result<(), Box<dyn std::erro
     let add_pool = owner
         .call(contract.id(), "add_pool")
         .args_json(json!({
-            "pool_address": accounts(5),
+            "pool_id": accounts(5),
         }))
         .transact()
         .await?;
@@ -501,6 +501,9 @@ async fn test_update_total_staked_with_failure() -> Result<(), Box<dyn std::erro
         .await?;
     assert!(stake.is_success());
 
+    let (pre_total_staked, _) = get_total_staked(contract.clone()).await?;
+    let _ = move_epoch_forward(&sandbox, &contract).await;
+
     // try to update total staked for both pools
     let update_total_staked = owner
         .call(contract.id(), "update_total_staked")
@@ -508,10 +511,13 @@ async fn test_update_total_staked_with_failure() -> Result<(), Box<dyn std::erro
         .transact()
         .await?;
 
-    // verify the update_total_staked transaction failed
-    assert!(update_total_staked.is_failure());
+    let (total_staked, _) = get_total_staked(contract.clone()).await?;
 
-    // verify if the first pool was not updated
+    // verify the update_total_staked transaction succeeded, but the total_staked was not updated
+    assert!(update_total_staked.is_success());
+    assert!(total_staked == pre_total_staked);
+
+    // verify that the first pool was not updated
     let result = owner.view(contract.id(), "get_pools").await?;
     let pools: Vec<PoolInfo> = result.json()?;
 

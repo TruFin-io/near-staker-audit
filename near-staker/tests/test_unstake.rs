@@ -175,7 +175,7 @@ async fn test_unstake_from_specific_pool() -> Result<(), Box<dyn std::error::Err
     let result = owner
         .call(contract.id(), "add_pool")
         .args_json(json!({
-            "pool_address": swanky_new_pool.id(),
+            "pool_id": swanky_new_pool.id(),
         }))
         .transact()
         .await?;
@@ -184,7 +184,7 @@ async fn test_unstake_from_specific_pool() -> Result<(), Box<dyn std::error::Err
     let stake = alice
         .call(contract.id(), "stake_to_specific_pool")
         .args_json(json!({
-            "pool_address": swanky_new_pool.id(),
+            "pool_id": swanky_new_pool.id(),
         }))
         .deposit(NearToken::from_near(10))
         .gas(Gas::from_tgas(300))
@@ -198,7 +198,7 @@ async fn test_unstake_from_specific_pool() -> Result<(), Box<dyn std::error::Err
     let unstake = alice
         .call(contract.id(), "unstake_from_specific_pool")
         .args_json(json!({
-            "pool_address": swanky_new_pool.id(),
+            "pool_id": swanky_new_pool.id(),
             "amount": U128::from(2 * ONE_NEAR),
         }))
         .deposit(NearToken::from_near(1))
@@ -229,7 +229,7 @@ async fn test_unstake_more_than_staked_from_specific_pool() -> Result<(), Box<dy
     let result = owner
         .call(contract.id(), "add_pool")
         .args_json(json!({
-            "pool_address": swanky_new_pool.id(),
+            "pool_id": swanky_new_pool.id(),
         }))
         .transact()
         .await?;
@@ -238,7 +238,7 @@ async fn test_unstake_more_than_staked_from_specific_pool() -> Result<(), Box<dy
     let stake = alice
         .call(contract.id(), "stake_to_specific_pool")
         .args_json(json!({
-            "pool_address": default_pool.id(),
+            "pool_id": default_pool.id(),
         }))
         .deposit(NearToken::from_near(3000))
         .gas(Gas::from_tgas(300))
@@ -252,7 +252,7 @@ async fn test_unstake_more_than_staked_from_specific_pool() -> Result<(), Box<dy
     let unstake = alice
         .call(contract.id(), "unstake_from_specific_pool")
         .args_json(json!({
-            "pool_address": swanky_new_pool.id(),
+            "pool_id": swanky_new_pool.id(),
             "amount": U128::from(3000 * ONE_NEAR),
         }))
         .deposit(NearToken::from_near(1))
@@ -365,7 +365,7 @@ async fn test_unstake_from_disabled_pool() -> Result<(), Box<dyn std::error::Err
     let result = owner
         .call(contract.id(), "add_pool")
         .args_json(json!({
-            "pool_address": swanky_new_pool.id(),
+            "pool_id": swanky_new_pool.id(),
         }))
         .transact()
         .await?;
@@ -382,7 +382,7 @@ async fn test_unstake_from_disabled_pool() -> Result<(), Box<dyn std::error::Err
     let result = owner
         .call(contract.id(), "disable_pool")
         .args_json(json!({
-            "pool_address": swanky_new_pool.id(),
+            "pool_id": swanky_new_pool.id(),
         }))
         .transact()
         .await?;
@@ -540,10 +540,10 @@ async fn test_unstake_refunds_excess_attached_deposit() -> Result<(), Box<dyn st
         alice.view_account().await?.balance.as_yoctonear()
     );
     let fees = NearToken::from_millinear(5);
-    let storage_cost: NearToken = contract.view("get_storage_cost").await?.json().unwrap();
+    let storage_cost: U128 = contract.view("get_storage_cost").await?.json().unwrap();
     assert!(
         alice.view_account().await?.balance.as_yoctonear()
-            > pre_balance.as_yoctonear() - fees.as_yoctonear() - storage_cost.as_yoctonear()
+            > pre_balance.as_yoctonear() - fees.as_yoctonear() - storage_cost.0
     );
     Ok(())
 }
@@ -566,7 +566,7 @@ async fn test_unstake_from_nonexistent_pool_fails() -> Result<(), Box<dyn std::e
     let unstake = alice
         .call(contract.id(), "unstake_from_specific_pool")
         .args_json(json!({
-            "pool_address": "nonexistent.pool",
+            "pool_id": "nonexistent.pool",
             "amount": U128::from(2 * ONE_NEAR),
         }))
         .gas(Gas::from_tgas(300))
@@ -737,7 +737,7 @@ async fn test_unstake_fails_when_not_enough_funds_on_pool() -> Result<(), Box<dy
     let add_pool = owner
         .call(contract.id(), "add_pool")
         .args_json(json!({
-            "pool_address": pool_2.id(),
+            "pool_id": pool_2.id(),
         }))
         .transact()
         .await?;
@@ -751,7 +751,7 @@ async fn test_unstake_fails_when_not_enough_funds_on_pool() -> Result<(), Box<dy
         .call(contract.id(), "unstake_from_specific_pool")
         .args_json(json!({
             "amount": U128::from(5 * ONE_NEAR),
-            "pool_address": pool_2.id()
+            "pool_id": pool_2.id()
         }))
         .deposit(NearToken::from_near(1))
         .gas(Gas::from_tgas(300))
@@ -877,7 +877,7 @@ async fn test_unstake_does_not_unstake_if_get_account_unstaked_balance_fails(
     let result = owner
         .call(contract.id(), "add_pool")
         .args_json(json!({
-            "pool_address": pool_2.id(),
+            "pool_id": pool_2.id(),
         }))
         .transact()
         .await?;
@@ -887,14 +887,14 @@ async fn test_unstake_does_not_unstake_if_get_account_unstaked_balance_fails(
         .call(contract.id(), "stake_to_specific_pool")
         .deposit(NearToken::from_near(10))
         .args_json(json!({
-            "pool_address": pool_2.id(),
+            "pool_id": pool_2.id(),
         }))
         .gas(Gas::from_tgas(300))
         .transact()
         .await?;
     assert!(stake.is_success());
 
-    let _ = move_epoch_forward_and_update_total_staked(&sandbox, &contract, owner.clone()).await?;
+    move_epoch_forward_and_update_total_staked(&sandbox, &contract, owner.clone()).await?;
 
     // set flag that will cause get_account_unstaked_balance to fail
     let break_pool = owner
@@ -923,7 +923,7 @@ async fn test_unstake_does_not_unstake_if_get_account_unstaked_balance_fails(
     assert!(break_pool.is_success());
 
     let pre_unstaked_amount = get_account_unstaked_balance(&pool_2, contract.id().clone()).await?;
-    let pre_balance_alice = get_trunear_balance(&contract, &alice.clone().id()).await?;
+    let pre_balance_alice = get_trunear_balance(&contract, alice.clone().id()).await?;
 
     // break it again
     let break_pool = owner
@@ -937,7 +937,7 @@ async fn test_unstake_does_not_unstake_if_get_account_unstaked_balance_fails(
         .call(contract.id(), "unstake_from_specific_pool")
         .args_json(json!({
             "amount": U128::from(2 * ONE_NEAR),
-            "pool_address": pool_2.id()
+            "pool_id": pool_2.id()
         }))
         .deposit(NearToken::from_near(1))
         .gas(Gas::from_tgas(300))
@@ -1010,7 +1010,7 @@ async fn test_unstake_from_specific_pool_when_contract_not_in_sync_fails(
     let result = owner
         .call(contract.id(), "add_pool")
         .args_json(json!({
-            "pool_address": second_pool.id(),
+            "pool_id": second_pool.id(),
         }))
         .transact()
         .await?;
@@ -1035,7 +1035,7 @@ async fn test_unstake_from_specific_pool_when_contract_not_in_sync_fails(
         .call(contract.id(), "unstake_from_specific_pool")
         .args_json(json!({
             "amount": U128::from(2 * ONE_NEAR),
-            "pool_address": second_pool.id()
+            "pool_id": second_pool.id()
         }))
         .deposit(NearToken::from_near(1))
         .gas(Gas::from_tgas(300))
@@ -1064,7 +1064,7 @@ async fn test_unstake_and_withdraw_simultaneously() -> Result<(), Box<dyn std::e
         .await?;
     assert!(stake.is_success());
 
-    let _ = move_epoch_forward_and_update_total_staked(&sandbox, &contract, owner.clone()).await?;
+    move_epoch_forward_and_update_total_staked(&sandbox, &contract, owner.clone()).await?;
 
     let unstake = alice
         .call(contract.id(), "unstake")
@@ -1105,6 +1105,7 @@ async fn test_unstake_and_withdraw_simultaneously() -> Result<(), Box<dyn std::e
     // as withdraw executes slightly later, it will attempt to withdraw after we withdraw in the unstake and thus fail
     assert!(unstake_result.is_success());
     assert!(withdraw_result.is_failure());
+    check_error_msg(withdraw_result, "Contract is currently executing");
 
     Ok(())
 }
@@ -1124,7 +1125,7 @@ async fn test_withdraw_and_unstake_simultaneously() -> Result<(), Box<dyn std::e
         .await?;
     assert!(stake.is_success());
 
-    let _ = move_epoch_forward_and_update_total_staked(&sandbox, &contract, owner.clone()).await?;
+    move_epoch_forward_and_update_total_staked(&sandbox, &contract, owner.clone()).await?;
 
     let unstake = alice
         .call(contract.id(), "unstake")
@@ -1164,11 +1165,8 @@ async fn test_withdraw_and_unstake_simultaneously() -> Result<(), Box<dyn std::e
 
     // as unstake executes slightly later, it will attempt to withdraw after the withdraw and therefore fail
     assert!(withdraw_result.is_success());
-    assert!(unstake_result.is_success());
-    println!("{:?}", unstake_result.logs());
-    assert!(unstake_result
-        .logs()
-        .contains(&"Failed to unstake: Callback failed"));
+    assert!(unstake_result.is_failure());
+    check_error_msg(unstake_result, "Contract is currently executing");
 
     Ok(())
 }

@@ -71,7 +71,7 @@ stake_to_specific_pool() {
   local amount=$2
   local delegation_pool=$3
 
-  near call $STAKER stake_to_specific_pool "{\"pool_address\": \"$delegation_pool\"}" --accountId $user --amount $amount --gas 300000000000000
+  near call $STAKER stake_to_specific_pool "{\"pool_id\": \"$delegation_pool\"}" --accountId $user --amount $amount --gas 300000000000000
   if [ $? -ne 0 ]; then
     print_error "User $user failed to stake $amount NEAR on pool $delegation_pool"
     exit $?
@@ -102,7 +102,7 @@ unstake_from_specific_pool() {
   local delegation_pool=$3
 
   local zeros="000000000000000000000000"
-  near call $STAKER unstake_from_specific_pool "{\"pool_address\": \"$delegation_pool\", \"amount\": \"$amount$zeros\"}" --accountId $user --gas 300000000000000
+  near call $STAKER unstake_from_specific_pool "{\"pool_id\": \"$delegation_pool\", \"amount\": \"$amount$zeros\"}" --accountId $user --gas 300000000000000
   if [ $? -ne 0 ]; then
     print_error "User $user failed to unstake $amount NEAR from pool $delegation_pool"
     exit $?

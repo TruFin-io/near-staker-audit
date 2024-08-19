@@ -143,6 +143,9 @@ async fn test_unstake_multiple_times() -> Result<(), Box<dyn std::error::Error>>
     assert!(second_unstake.is_failure());
     assert!(third_unstake.is_failure());
 
+    check_error_msg(second_unstake, "Contract is currently executing");
+    check_error_msg(third_unstake, "Contract is currently executing");
+
     let post_unstaked_balance = get_account_unstaked_balance(&pool, contract.id().clone()).await?;
     assert!(post_unstaked_balance <= bob_stake_amount * ONE_NEAR + ONE_NEAR);
     Ok(())

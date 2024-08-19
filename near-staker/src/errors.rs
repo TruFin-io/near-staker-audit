@@ -8,6 +8,7 @@ pub const ERR_NOT_IN_SYNC: &str = "Contract is not in sync";
 // access errors
 pub const ERR_ONLY_OWNER: &str = "Only the owner can call this method";
 pub const ERR_PAUSED: &str = "Contract is paused";
+pub const ERR_LOCKED: &str = "Contract is currently executing";
 pub const ERR_NOT_PAUSED: &str = "Contract is not paused";
 pub const ERR_INVALID_CALLER: &str = "Invalid caller";
 

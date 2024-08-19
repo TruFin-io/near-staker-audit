@@ -12,7 +12,3 @@ pub fn mul_div_with_rounding(x: U256, y: U256, denominator: U256, rounding_up: b
     }
     result
 }
-
-pub fn checked_sub(a: u128, b: u128) -> u128 {
-    a.checked_sub(b).unwrap_or(0)
-}

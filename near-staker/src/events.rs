@@ -56,10 +56,10 @@ pub enum Event<'a> {
     PausedEvent {},
     UnpausedEvent {},
     DelegationPoolAddedEvent {
-        pool_address: &'a AccountId,
+        pool_id: &'a AccountId,
     },
     DelegationPoolStateChangedEvent {
-        pool_address: &'a AccountId,
+        pool_id: &'a AccountId,
         old_state: ValidatorState,
         new_state: ValidatorState,
     },
