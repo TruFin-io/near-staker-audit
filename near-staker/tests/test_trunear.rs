@@ -232,6 +232,31 @@ async fn test_ft_transfer() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[tokio::test]
+async fn test_ft_resolve_transfer() -> Result<(), Box<dyn std::error::Error>> {
+    let (owner, sandbox, contract, _) = setup_contract_with_pool().await?;
+
+    let alice = setup_whitelisted_user(&owner, &contract, "alice").await?;
+    let bob = setup_user(&sandbox, "bob").await?;
+
+    let response = alice
+        .call(contract.id(), "ft_resolve_transfer")
+        .args_json(json!({
+            "sender_id": alice.id(),
+            "receiver_id": bob.id(),
+            "amount": U128(1 * ONE_NEAR),
+        }))
+        .transact()
+        .await?;
+
+    // verify that ft_resolve_transfer exists by checking that
+    // its execution failed because it's private.
+    assert!(response.is_failure());
+    check_error_msg(response, "Method ft_resolve_transfer is private");
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn test_storage_balance_of() -> Result<(), Box<dyn std::error::Error>> {
     let (owner, _, contract, _) = setup_contract_with_pool().await?;
     let alice = setup_whitelisted_user(&owner, &contract, "alice").await?;
