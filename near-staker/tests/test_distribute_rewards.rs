@@ -1,4 +1,8 @@
-use near_sdk::{json_types::U128, serde_json::json, test_utils::accounts, Gas, NearToken};
+use std::str::FromStr;
+
+use near_sdk::{
+    json_types::U128, serde_json::json, test_utils::accounts, AccountId, Gas, NearToken,
+};
 
 pub mod constants;
 use constants::SHARE_PRICE_SCALING_FACTOR;
@@ -1045,6 +1049,84 @@ async fn test_distribute_all_in_near() -> Result<(), Box<dyn std::error::Error>>
             user: alice.id().to_string(),
         }],
     );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_distribute_all_in_near_with_exact_distribution_amounts(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let (owner, sandbox, contract, _) = setup_contract_with_pool().await?;
+    let alice = setup_user_with_tokens(&sandbox, "alice", 50).await?;
+    whitelist_user(&contract, &owner, &alice).await?;
+    let bob = setup_whitelisted_user(&owner, &contract, "bob").await?;
+
+    set_distribution_fee(&contract, &owner, 500).await?;
+    let treasury = get_treasury_id(&contract).await?;
+
+    // alice allocates to many recipients at different share prices
+    let recipients = ["aa", "bb", "cc", "dd", "ee", "ff"];
+    for recipient in recipients {
+        let account_id = AccountId::from_str(recipient).unwrap();
+        setup_allocation(&alice, &account_id, ONE_NEAR, contract.id()).await?;
+        let _ =
+            move_epoch_forward_and_update_total_staked(&sandbox, &contract, owner.clone()).await?;
+    }
+
+    // get the required amounts for the distribute_all call
+    let (required_trunear, required_near) =
+        calculate_distribute_amounts(&contract, alice.id(), true).await?;
+
+    // transfer excess trunear to bob so alice is left with the exact amount required by the distribution
+    let initial_trunear_balance = get_trunear_balance(&contract, alice.id()).await?;
+    let excess_trunear = initial_trunear_balance - required_trunear;
+    register_account(&contract, &bob, &bob.id()).await?;
+    transfer_trunear(&contract, &alice, &bob.id(), excess_trunear).await?;
+
+    // get alice and treasury trunear balannces before the distribute_all call
+    let pre_alice_trunear_balance = get_trunear_balance(&contract, alice.id()).await?;
+    let pre_treasury_trunear_balance = get_trunear_balance(&contract, &treasury).await?;
+
+    // alice distributes to all recipients in near
+    let distribution = alice
+        .call(contract.id(), "distribute_all")
+        .args_json(json!({
+            "in_near": true,
+        }))
+        .deposit(NearToken::from_yoctonear(required_near))
+        .gas(Gas::from_gas(300 * 1_000_000_000_00))
+        .transact()
+        .await?;
+
+    // verify the distribution was successful
+    assert!(distribution.is_success());
+
+    // calculate the total amount of near spent in the distribution
+    let mut total_near_spent: u128 = 0;
+    let events_json = get_events(distribution.logs());
+    for recipient in recipients {
+        let distribution_event: Event<DistributedRewardsEvent> =
+            find_event(&events_json, |event: &Value| {
+                event["event"] == "distributed_rewards_event"
+                    && event["data"][0]["recipient"] == recipient.to_string()
+            })
+            .unwrap();
+        let data = distribution_event.data.first().unwrap();
+        total_near_spent += data.near_amount.parse::<u128>().unwrap();
+    }
+
+    // verify that the total near spent is not greater than the required near amount
+    assert!(total_near_spent <= required_near);
+
+    // verify that the total trunear spent is not greater than the required trunear amount
+    let alice_trunear_balance = get_trunear_balance(&contract, alice.id()).await?;
+    let total_trunear_spent = pre_alice_trunear_balance - alice_trunear_balance;
+    assert!(total_trunear_spent <= required_trunear);
+
+    // verify that the treasury received the exact amount of trunear spent
+    let treasury_trunear_balance = get_trunear_balance(&contract, &treasury).await?;
+    let treasury_received_trunear = treasury_trunear_balance - pre_treasury_trunear_balance;
+    assert_eq!(treasury_received_trunear, total_trunear_spent);
 
     Ok(())
 }
