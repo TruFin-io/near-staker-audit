@@ -9,6 +9,7 @@ use helpers::*;
 pub mod event;
 use event::*;
 use serde_json::Value;
+use tokio::try_join;
 
 #[tokio::test]
 async fn test_distribute_rewards_in_trunear_when_no_rewards_accrued(
@@ -1438,6 +1439,130 @@ async fn test_distribute_all_with_insufficient_gas_does_not_emit_events(
     // verify that no event is emitted
     let events_json = get_events(distribution.logs());
     assert!(events_json.is_empty());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_distribute_rewards_with_contract_not_in_sync_fails(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let (owner, sandbox, contract, _) = setup_contract_with_pool().await?;
+    let alice = setup_whitelisted_user(&owner, &contract, "alice").await?;
+    let bob = accounts(4);
+    setup_allocation(&alice, &bob, 4 * ONE_NEAR, contract.id()).await?;
+
+    move_epoch_forward(&sandbox, &contract).await?;
+
+    let result = alice
+        .call(contract.id(), "distribute_rewards")
+        .args_json(json!({
+            "recipient": accounts(4),
+            "in_near": false,
+        }))
+        .transact()
+        .await?;
+
+    assert!(result.is_failure());
+    check_error_msg(result, "Contract is not in sync");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_distribute_rewards_with_locked_contract_should_fail(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let (owner, _, contract, _) = setup_contract_with_pool().await?;
+    let alice = setup_whitelisted_user(&owner, &contract, "alice").await?;
+    let bob = setup_whitelisted_user(&owner, &contract, "bob").await?;
+    let charlie = accounts(4);
+
+    setup_allocation(&bob, &charlie, ONE_NEAR, contract.id()).await?;
+
+    let stake_tx = alice
+        .call(contract.id(), "stake")
+        .args_json(json!({
+            "amount": U128::from(ONE_NEAR),
+        }))
+        .deposit(NearToken::from_near(1))
+        .gas(Gas::from_tgas(300))
+        .transact();
+
+    let distribute_tx = bob
+        .call(contract.id(), "distribute_rewards")
+        .args_json(json!({
+            "recipient": charlie,
+            "in_near": false,
+        }))
+        .transact();
+
+    let (stake_tx_result, distribute_tx_result) = try_join!(stake_tx, distribute_tx)?;
+
+    // verify that the distribute_rewards tx failed because the stake tx locked the contract
+    assert!(stake_tx_result.is_success());
+    assert!(distribute_tx_result.is_failure());
+    check_error_msg(distribute_tx_result, "Contract is currently executing");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_distribute_all_with_contract_not_in_sync_fails(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let (owner, sandbox, contract, _) = setup_contract_with_pool().await?;
+    let alice = setup_whitelisted_user(&owner, &contract, "alice").await?;
+    let bob = accounts(4);
+    let charlie = accounts(5);
+    setup_allocation(&alice, &bob, 2 * ONE_NEAR, contract.id()).await?;
+    setup_allocation(&alice, &charlie, 4 * ONE_NEAR, contract.id()).await?;
+
+    move_epoch_forward(&sandbox, &contract).await?;
+
+    let result = alice
+        .call(contract.id(), "distribute_all")
+        .args_json(json!({
+            "in_near": false,
+        }))
+        .transact()
+        .await?;
+
+    assert!(result.is_failure());
+    check_error_msg(result, "Contract is not in sync");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_distribute_all_with_locked_contract_should_fail(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let (owner, _, contract, _) = setup_contract_with_pool().await?;
+    let alice = setup_whitelisted_user(&owner, &contract, "alice").await?;
+    let bob = setup_whitelisted_user(&owner, &contract, "bob").await?;
+    let charlie = accounts(4);
+
+    setup_allocation(&bob, &charlie, ONE_NEAR, contract.id()).await?;
+
+    let stake_tx = alice
+        .call(contract.id(), "stake")
+        .args_json(json!({
+            "amount": U128::from(ONE_NEAR),
+        }))
+        .deposit(NearToken::from_near(1))
+        .gas(Gas::from_tgas(300))
+        .transact();
+
+    let distribute_all_tx = bob
+        .call(contract.id(), "distribute_all")
+        .args_json(json!({
+            "in_near": false,
+        }))
+        .transact();
+
+    let (stake_tx_result, distribute_all_tx_result) = try_join!(stake_tx, distribute_all_tx)?;
+
+    // verify that the distribute_all tx failed because the stake tx locked the contract
+    assert!(stake_tx_result.is_success());
+    assert!(distribute_all_tx_result.is_failure());
+    check_error_msg(distribute_all_tx_result, "Contract is currently executing");
 
     Ok(())
 }

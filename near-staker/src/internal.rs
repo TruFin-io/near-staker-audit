@@ -139,8 +139,10 @@ impl NearStaker {
             return Promise::new(caller).transfer(attached_near);
         }
 
-        // burn user shares
+        // burn user shares and update total staked to keep share price the same
         self.internal_burn(shares_amount, caller.clone());
+        self.total_staked -= amount;
+        self.tax_exempt_stake = self.tax_exempt_stake.saturating_sub(amount);
 
         // prepare unstake arguments
         let unstake_amount = json!({ "amount": NearToken::from_yoctonear(amount) })

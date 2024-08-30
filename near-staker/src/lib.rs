@@ -664,6 +664,9 @@ impl NearStaker {
     pub fn allocate(&mut self, recipient: AccountId, amount: U128) {
         self.check_not_paused();
         self.check_whitelisted();
+        self.check_contract_in_sync();
+        self.check_not_locked();
+
         let allocator = env::predecessor_account_id();
         let amount = amount.0;
 
@@ -795,6 +798,8 @@ impl NearStaker {
     pub fn distribute_rewards(&mut self, recipient: AccountId, in_near: bool) {
         self.check_not_paused();
         self.check_whitelisted();
+        self.check_contract_in_sync();
+        self.check_not_locked();
 
         let distributor = env::predecessor_account_id();
 
@@ -878,6 +883,8 @@ impl NearStaker {
     pub fn distribute_all(&mut self, in_near: bool) {
         self.check_not_paused();
         self.check_whitelisted();
+        self.check_contract_in_sync();
+        self.check_not_locked();
 
         // check if distributor has allocations
         let distributor = env::predecessor_account_id();
@@ -1127,6 +1134,8 @@ impl NearStaker {
             Err(_) => {
                 log!("Failed to unstake: {}", ERR_CALLBACK_FAILED);
                 self.internal_mint(shares_amount.0, caller.clone());
+                self.total_staked += amount.0;
+                self.tax_exempt_stake += amount.0;
                 Promise::new(caller).transfer(attached_near);
                 return;
             }
@@ -1146,8 +1155,6 @@ impl NearStaker {
         // update delegation pool and total_staked
         pool.last_unstake = Some(unstake_epoch);
         pool.total_staked = (pool.total_staked.0 - amount.0).into();
-        self.total_staked -= amount.0;
-        self.tax_exempt_stake = self.tax_exempt_stake.saturating_sub(amount.0);
         log!("Updated total_staked: {}", self.total_staked);
 
         log!(

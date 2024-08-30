@@ -1,10 +1,11 @@
-use near_sdk::{json_types::U128, serde_json::json, test_utils::accounts, NearToken};
+use near_sdk::{json_types::U128, serde_json::json, test_utils::accounts, Gas, NearToken};
 pub mod constants;
 pub mod helpers;
 mod types;
 
 use constants::*;
 use helpers::*;
+use tokio::try_join;
 use types::*;
 
 #[tokio::test]
@@ -327,6 +328,67 @@ async fn test_allocate_with_no_deposit_fails() -> Result<(), Box<dyn std::error:
         .await?;
     assert!(result.is_failure());
     check_error_msg(result, "The attached deposit is less than the storage cost");
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_allocate_with_contract_not_in_sync_fails() -> Result<(), Box<dyn std::error::Error>> {
+    let (owner, sandbox, contract) = setup_contract().await?;
+
+    move_epoch_forward(&sandbox, &contract).await?;
+
+    let alice = setup_whitelisted_user(&owner, &contract, "alice").await?;
+    let result = alice
+        .call(contract.id(), "allocate")
+        .args_json(json!({
+            "recipient": accounts(4),
+            "amount": U128::from(ONE_NEAR),
+        }))
+        .deposit(NearToken::from_near(1))
+        .transact()
+        .await?;
+
+    assert!(result.is_failure());
+    check_error_msg(result, "Contract is not in sync");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_allocate_with_locked_contract_should_fail() -> Result<(), Box<dyn std::error::Error>>
+{
+    let (owner, _, contract, _) = setup_contract_with_pool().await?;
+    let alice = setup_whitelisted_user(&owner, &contract, "alice").await?;
+    let bob = setup_whitelisted_user(&owner, &contract, "bob").await?;
+    let charlie = accounts(4);
+
+    setup_allocation(&bob, &charlie, ONE_NEAR, contract.id()).await?;
+
+    let stake_tx = alice
+        .call(contract.id(), "stake")
+        .args_json(json!({
+            "amount": U128::from(ONE_NEAR),
+        }))
+        .deposit(NearToken::from_near(1))
+        .gas(Gas::from_tgas(300))
+        .transact();
+
+    let allocate_tx = bob
+        .call(contract.id(), "allocate")
+        .args_json(json!({
+            "recipient": accounts(4),
+            "amount": U128::from(ONE_NEAR),
+        }))
+        .deposit(NearToken::from_near(1))
+        .transact();
+
+    let (stake_result, allocate_result) = try_join!(stake_tx, allocate_tx)?;
+
+    // verify that the allocate tx failed because the stake tx locked the contract
+    assert!(stake_result.is_success());
+    assert!(allocate_result.is_failure());
+    check_error_msg(allocate_result, "Contract is currently executing");
+
     Ok(())
 }
 
