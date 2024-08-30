@@ -365,7 +365,7 @@ impl NearStaker {
     pub fn get_is_locked(&self) -> bool {
         self.is_locked
     }
-    
+
     /// Owner Functionality
 
     /// Upgrade the contract and migrate the contract state.
@@ -1112,6 +1112,7 @@ impl NearStaker {
         shares_amount: U128,
         withdraw_occurred: bool,
         attached_near: NearToken,
+        unstake_epoch: u64,
         #[callback_result] new_unstaked_amount: Result<U128, PromiseError>,
     ) {
         self.is_locked = false;
@@ -1138,7 +1139,7 @@ impl NearStaker {
         }
 
         // update delegation pool and total_staked
-        pool.last_unstake = Some(env::epoch_height());
+        pool.last_unstake = Some(unstake_epoch);
         pool.total_staked = (pool.total_staked.0 - amount.0).into();
         self.total_staked -= amount.0;
         self.tax_exempt_stake = self.tax_exempt_stake.saturating_sub(amount.0);
@@ -1160,7 +1161,7 @@ impl NearStaker {
             pool_id: pool_id.clone(),
             near_amount: amount.0,
             user: caller.clone(),
-            epoch: env::epoch_height(),
+            epoch: unstake_epoch,
         };
 
         self.unstake_requests
@@ -1183,7 +1184,7 @@ impl NearStaker {
             share_price_num: &share_price_num,
             share_price_denom: &share_price_denom,
             unstake_nonce: &U128(self.unstake_nonce),
-            epoch: &env::epoch_height().into(),
+            epoch: &unstake_epoch.into(),
             pool_id: &pool_id,
         }
         .emit();

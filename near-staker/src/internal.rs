@@ -2,7 +2,7 @@
 use near_contract_standards::fungible_token::events::{FtBurn, FtMint};
 use near_contract_standards::fungible_token::FungibleTokenCore;
 use near_sdk::{
-    env, json_types::U128, log, require, serde_json::json, AccountId, Gas, NearToken, Promise,
+    env, json_types::U128, log, require, serde_json::json, AccountId, NearToken, Promise,
 };
 
 use crate::constants::*;
@@ -198,6 +198,7 @@ impl NearStaker {
                     U128(shares_amount),
                     withdraw_occurred,
                     attached_near,
+                    env::epoch_height(),
                 ),
         )
     }
