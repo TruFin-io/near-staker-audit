@@ -100,13 +100,13 @@ impl NearStaker {
                 "deposit_and_stake".to_owned(),
                 NO_ARGS,
                 NearToken::from_yoctonear(amount),
-                Gas::from_tgas(30),
+                XCC_GAS,
             )
             .function_call(
                 "get_account_total_balance".to_owned(),
                 staker_arg,
                 NO_DEPOSIT,
-                XCC_GAS,
+                VIEW_GAS,
             )
             .then(
                 Self::ext(env::current_account_id())
