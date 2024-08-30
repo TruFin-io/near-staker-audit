@@ -513,10 +513,7 @@ impl NearStaker {
     ) -> u128 {
         // check if user has enough TruNEAR to unstake
         let max_withdraw = self.max_withdraw(caller.clone()).0;
-        require!(
-            self.max_withdraw(caller.clone()) >= U128(amount),
-            ERR_INVALID_UNSTAKE_AMOUNT
-        );
+        require!(max_withdraw >= amount, ERR_INVALID_UNSTAKE_AMOUNT);
 
         // if the user's remaining balance falls below one NEAR, unstake the entire user stake
         let unstake_amount = if max_withdraw - amount < ONE_NEAR {
