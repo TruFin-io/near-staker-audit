@@ -415,6 +415,11 @@ impl NearStaker {
         }
         .emit();
         self.treasury = new_treasury;
+
+        // register the new treasury address if it doesn't have a TruNEAR account
+        if !self.token.accounts.contains_key(&self.treasury) {
+            self.token.accounts.insert(&self.treasury, &0);
+        }
     }
 
     /// Sets the treasury fee charged on rewards.
