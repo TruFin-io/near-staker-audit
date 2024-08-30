@@ -135,6 +135,7 @@ impl NearStaker {
             Self::convert_to_shares(amount, share_price_num, share_price_denom, false);
         if shares_amount == 0 {
             log!("Failed to unstake: {}", ERR_UNSTAKE_AMOUNT_TOO_LOW);
+            self.is_locked = false;
             return Promise::new(caller).transfer(attached_near);
         }
 

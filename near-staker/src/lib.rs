@@ -361,6 +361,11 @@ impl NearStaker {
         U128(assets)
     }
 
+    /// Returns whether the contract is locked.
+    pub fn get_is_locked(&self) -> bool {
+        self.is_locked
+    }
+    
     /// Owner Functionality
 
     /// Upgrade the contract and migrate the contract state.
