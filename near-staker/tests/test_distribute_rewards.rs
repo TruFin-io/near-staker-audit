@@ -1526,6 +1526,62 @@ async fn test_distribute_all_with_insufficient_gas_does_not_emit_events(
 }
 
 #[tokio::test]
+async fn test_distribute_all_with_insufficient_gas_does_not_update_the_allocations_price(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let (owner, sandbox, contract, _) = setup_contract_with_pool().await?;
+    let alice = setup_whitelisted_user(&owner, &contract, "alice").await?;
+    let bob = setup_user(&sandbox, "bob").await?;
+    let charlie = setup_user(&sandbox, "charlie").await?;
+    let eve = setup_user(&sandbox, "eve").await?;
+
+    // set up some allocations at the current share price
+    let pre_share_price = get_share_price(contract.clone()).await?;
+
+    setup_allocation(&alice, bob.id(), 10 * ONE_NEAR, contract.id()).await?;
+    setup_allocation(&alice, charlie.id(), 10 * ONE_NEAR, contract.id()).await?;
+    setup_allocation(&alice, eve.id(), 10 * ONE_NEAR, contract.id()).await?;
+
+    // get the average share price for the allocations before the distribution
+    let (_, pre_total_alloc_share_price, _, _) = get_total_allocated(&contract, alice.id()).await?;
+
+    // verify the average allocations share price matches the current share price
+    assert_eq!(pre_share_price, pre_total_alloc_share_price);
+
+    // increase the share price
+    let _ = move_epoch_forward_and_update_total_staked(&sandbox, &contract, owner.clone()).await;
+
+    // verify the share price is now greater than the average allocation share price
+    let share_price = get_share_price(contract.clone()).await?;
+    assert!(share_price > pre_total_alloc_share_price);
+
+    // call distribute all with insufficient gas to complete the distribution
+    let (_, near_amount_to_distribute) =
+        calculate_distribute_amounts(&contract, alice.id(), true).await?;
+
+    let distribution = alice
+        .call(contract.id(), "distribute_all")
+        .args_json(json!({
+            "in_near": true,
+        }))
+        .deposit(NearToken::from_yoctonear(near_amount_to_distribute))
+        .gas(Gas::from_gas(4671800000000))
+        .transact()
+        .await?;
+
+    // verify the distribution failed because of insufficient gas
+    assert!(distribution.is_failure());
+    check_error_msg(distribution.clone(), "Exceeded the prepaid gas.");
+
+    // get the current average allocation share price
+    let (_, total_alloc_share_price, _, _) = get_total_allocated(&contract, alice.id()).await?;
+
+    // verify that the average share price didn't change
+    assert_eq!(total_alloc_share_price, pre_total_alloc_share_price);
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn test_distribute_rewards_with_contract_not_in_sync_fails(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let (owner, sandbox, contract, _) = setup_contract_with_pool().await?;
