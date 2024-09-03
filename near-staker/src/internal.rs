@@ -449,12 +449,7 @@ impl NearStaker {
 
         // calculate the distribution fee if applicable
         let fees = shares_to_move * (self.distribution_fee as u128) / (FEE_PRECISION as u128);
-
-        if fees > 0 {
-            shares_to_move -= fees;
-            self.token
-                .internal_transfer(&distributor, &self.treasury, fees, None);
-        }
+        shares_to_move -= fees;
 
         // calculate the amount of rewards in NEAR
         let near_amount = NearToken::from_yoctonear(Self::convert_to_assets(
@@ -490,6 +485,12 @@ impl NearStaker {
             refund_amount = attached_near;
             self.token
                 .internal_transfer(&distributor, &recipient, shares_to_move, None);
+        }
+
+        // transfer fees to the treasury
+        if fees > 0 {
+            self.token
+                .internal_transfer(&distributor, &self.treasury, fees, None);
         }
 
         // update the allocation and return the distribution info

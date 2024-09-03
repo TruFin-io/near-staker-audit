@@ -652,7 +652,7 @@ async fn test_distribute_rewards_in_near_with_no_trunear_if_dist_fee_is_set_fail
         .transact()
         .await?;
     assert!(distribution.is_failure());
-    check_error_msg(distribution, "The account doesn't have enough balance");
+    check_error_msg(distribution, "Insufficient TruNEAR balance");
 
     Ok(())
 }
