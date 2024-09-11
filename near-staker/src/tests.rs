@@ -96,6 +96,9 @@ fn test_set_treasury() {
     assert_eq!(event, "set_treasury_event");
     assert_eq!(data[0]["new_treasury"].as_str().unwrap(), new_treasury);
     assert_eq!(data[0]["old_treasury"].as_str().unwrap(), accounts(1));
+
+    // assert the treasury has a TruNEAR account
+    assert!(staker.token.accounts.contains_key(&new_treasury));
 }
 
 #[test]

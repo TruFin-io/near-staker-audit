@@ -165,6 +165,47 @@ async fn test_unstake_close_to_max_withdraw_amount_unstakes_entire_amount(
 }
 
 #[tokio::test]
+async fn test_unstake_zero_amount() -> Result<(), Box<dyn std::error::Error>> {
+    let (owner, _, contract, _) = setup_contract_with_pool().await?;
+
+    let alice = setup_whitelisted_user(&owner, &contract, "alice").await?;
+    let _ = stake(&contract, alice.clone(), 10).await?;
+
+    let pre_max_withdraw = get_max_withdraw(contract.clone(), alice.clone()).await?;
+    assert_eq!(pre_max_withdraw, 10 * ONE_NEAR);
+
+    let pre_near_balance: NearToken = alice.view_account().await?.balance;
+
+    // unstake 0 NEAR
+    let unstake = alice
+        .call(contract.id(), "unstake")
+        .args_json(json!({
+            "amount": U128::from(0),
+        }))
+        .deposit(NearToken::from_near(1))
+        .gas(Gas::from_tgas(300))
+        .transact()
+        .await?;
+
+    assert!(unstake.is_success());
+
+    // verify max_withdraw did not change
+    let max_withdraw = get_max_withdraw(contract.clone(), alice.clone()).await?;
+    assert_eq!(max_withdraw, pre_max_withdraw);
+
+    // verify the deposit got refunded
+    let near_balance: NearToken = alice.view_account().await?.balance;
+    let fees = NearToken::from_millinear(1).as_yoctonear();
+    assert!(pre_near_balance.as_yoctonear() - near_balance.as_yoctonear() < fees);
+
+    // verify the contract is unlocked
+    let is_locked = get_is_locked(contract.clone()).await?;
+    assert_eq!(is_locked, false);
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn test_unstake_from_specific_pool() -> Result<(), Box<dyn std::error::Error>> {
     let (owner, sandbox, contract, _) = setup_contract_with_pool().await?;
 

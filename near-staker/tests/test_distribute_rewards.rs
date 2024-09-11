@@ -1,4 +1,8 @@
-use near_sdk::{json_types::U128, serde_json::json, test_utils::accounts, Gas, NearToken};
+use std::str::FromStr;
+
+use near_sdk::{
+    json_types::U128, serde_json::json, test_utils::accounts, AccountId, Gas, NearToken,
+};
 
 pub mod constants;
 use constants::SHARE_PRICE_SCALING_FACTOR;
@@ -9,6 +13,7 @@ use helpers::*;
 pub mod event;
 use event::*;
 use serde_json::Value;
+use tokio::try_join;
 
 #[tokio::test]
 async fn test_distribute_rewards_in_trunear_when_no_rewards_accrued(
@@ -647,7 +652,7 @@ async fn test_distribute_rewards_in_near_with_no_trunear_if_dist_fee_is_set_fail
         .transact()
         .await?;
     assert!(distribution.is_failure());
-    check_error_msg(distribution, "The account doesn't have enough balance");
+    check_error_msg(distribution, "Insufficient TruNEAR balance");
 
     Ok(())
 }
@@ -1049,6 +1054,84 @@ async fn test_distribute_all_in_near() -> Result<(), Box<dyn std::error::Error>>
 }
 
 #[tokio::test]
+async fn test_distribute_all_in_near_with_exact_distribution_amounts(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let (owner, sandbox, contract, _) = setup_contract_with_pool().await?;
+    let alice = setup_user_with_tokens(&sandbox, "alice", 50).await?;
+    whitelist_user(&contract, &owner, &alice).await?;
+    let bob = setup_whitelisted_user(&owner, &contract, "bob").await?;
+
+    set_distribution_fee(&contract, &owner, 500).await?;
+    let treasury = get_treasury_id(&contract).await?;
+
+    // alice allocates to many recipients at different share prices
+    let recipients = ["aa", "bb", "cc", "dd", "ee", "ff"];
+    for recipient in recipients {
+        let account_id = AccountId::from_str(recipient).unwrap();
+        setup_allocation(&alice, &account_id, ONE_NEAR, contract.id()).await?;
+        let _ =
+            move_epoch_forward_and_update_total_staked(&sandbox, &contract, owner.clone()).await?;
+    }
+
+    // get the required amounts for the distribute_all call
+    let (required_trunear, required_near) =
+        calculate_distribute_amounts(&contract, alice.id(), true).await?;
+
+    // transfer excess trunear to bob so alice is left with the exact amount required by the distribution
+    let initial_trunear_balance = get_trunear_balance(&contract, alice.id()).await?;
+    let excess_trunear = initial_trunear_balance - required_trunear;
+    register_account(&contract, &bob, &bob.id()).await?;
+    transfer_trunear(&contract, &alice, &bob.id(), excess_trunear).await?;
+
+    // get alice and treasury trunear balannces before the distribute_all call
+    let pre_alice_trunear_balance = get_trunear_balance(&contract, alice.id()).await?;
+    let pre_treasury_trunear_balance = get_trunear_balance(&contract, &treasury).await?;
+
+    // alice distributes to all recipients in near
+    let distribution = alice
+        .call(contract.id(), "distribute_all")
+        .args_json(json!({
+            "in_near": true,
+        }))
+        .deposit(NearToken::from_yoctonear(required_near))
+        .gas(Gas::from_gas(300 * 1_000_000_000_00))
+        .transact()
+        .await?;
+
+    // verify the distribution was successful
+    assert!(distribution.is_success());
+
+    // calculate the total amount of near spent in the distribution
+    let mut total_near_spent: u128 = 0;
+    let events_json = get_events(distribution.logs());
+    for recipient in recipients {
+        let distribution_event: Event<DistributedRewardsEvent> =
+            find_event(&events_json, |event: &Value| {
+                event["event"] == "distributed_rewards_event"
+                    && event["data"][0]["recipient"] == recipient.to_string()
+            })
+            .unwrap();
+        let data = distribution_event.data.first().unwrap();
+        total_near_spent += data.near_amount.parse::<u128>().unwrap();
+    }
+
+    // verify that the total near spent is not greater than the required near amount
+    assert!(total_near_spent <= required_near);
+
+    // verify that the total trunear spent is not greater than the required trunear amount
+    let alice_trunear_balance = get_trunear_balance(&contract, alice.id()).await?;
+    let total_trunear_spent = pre_alice_trunear_balance - alice_trunear_balance;
+    assert!(total_trunear_spent <= required_trunear);
+
+    // verify that the treasury received the exact amount of trunear spent
+    let treasury_trunear_balance = get_trunear_balance(&contract, &treasury).await?;
+    let treasury_received_trunear = treasury_trunear_balance - pre_treasury_trunear_balance;
+    assert_eq!(treasury_received_trunear, total_trunear_spent);
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn test_distribute_all_not_whitelisted_fails() -> Result<(), Box<dyn std::error::Error>> {
     let (_, sandbox, contract, _) = setup_contract_with_pool().await?;
     let alice = setup_user(&sandbox, "alice").await?;
@@ -1438,6 +1521,186 @@ async fn test_distribute_all_with_insufficient_gas_does_not_emit_events(
     // verify that no event is emitted
     let events_json = get_events(distribution.logs());
     assert!(events_json.is_empty());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_distribute_all_with_insufficient_gas_does_not_update_the_allocations_price(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let (owner, sandbox, contract, _) = setup_contract_with_pool().await?;
+    let alice = setup_whitelisted_user(&owner, &contract, "alice").await?;
+    let bob = setup_user(&sandbox, "bob").await?;
+    let charlie = setup_user(&sandbox, "charlie").await?;
+    let eve = setup_user(&sandbox, "eve").await?;
+
+    // set up some allocations at the current share price
+    let pre_share_price = get_share_price(contract.clone()).await?;
+
+    setup_allocation(&alice, bob.id(), 10 * ONE_NEAR, contract.id()).await?;
+    setup_allocation(&alice, charlie.id(), 10 * ONE_NEAR, contract.id()).await?;
+    setup_allocation(&alice, eve.id(), 10 * ONE_NEAR, contract.id()).await?;
+
+    // get the average share price for the allocations before the distribution
+    let (_, pre_total_alloc_share_price, _, _) = get_total_allocated(&contract, alice.id()).await?;
+
+    // verify the average allocations share price matches the current share price
+    assert_eq!(pre_share_price, pre_total_alloc_share_price);
+
+    // increase the share price
+    let _ = move_epoch_forward_and_update_total_staked(&sandbox, &contract, owner.clone()).await;
+
+    // verify the share price is now greater than the average allocation share price
+    let share_price = get_share_price(contract.clone()).await?;
+    assert!(share_price > pre_total_alloc_share_price);
+
+    // call distribute all with insufficient gas to complete the distribution
+    let (_, near_amount_to_distribute) =
+        calculate_distribute_amounts(&contract, alice.id(), true).await?;
+
+    let distribution = alice
+        .call(contract.id(), "distribute_all")
+        .args_json(json!({
+            "in_near": true,
+        }))
+        .deposit(NearToken::from_yoctonear(near_amount_to_distribute))
+        .gas(Gas::from_gas(4671800000000))
+        .transact()
+        .await?;
+
+    // verify the distribution failed because of insufficient gas
+    assert!(distribution.is_failure());
+    check_error_msg(distribution.clone(), "Exceeded the prepaid gas.");
+
+    // get the current average allocation share price
+    let (_, total_alloc_share_price, _, _) = get_total_allocated(&contract, alice.id()).await?;
+
+    // verify that the average share price didn't change
+    assert_eq!(total_alloc_share_price, pre_total_alloc_share_price);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_distribute_rewards_with_contract_not_in_sync_fails(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let (owner, sandbox, contract, _) = setup_contract_with_pool().await?;
+    let alice = setup_whitelisted_user(&owner, &contract, "alice").await?;
+    let bob = accounts(4);
+    setup_allocation(&alice, &bob, 4 * ONE_NEAR, contract.id()).await?;
+
+    move_epoch_forward(&sandbox, &contract).await?;
+
+    let result = alice
+        .call(contract.id(), "distribute_rewards")
+        .args_json(json!({
+            "recipient": accounts(4),
+            "in_near": false,
+        }))
+        .transact()
+        .await?;
+
+    assert!(result.is_failure());
+    check_error_msg(result, "Contract is not in sync");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_distribute_rewards_with_locked_contract_should_fail(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let (owner, _, contract, _) = setup_contract_with_pool().await?;
+    let alice = setup_whitelisted_user(&owner, &contract, "alice").await?;
+    let bob = setup_whitelisted_user(&owner, &contract, "bob").await?;
+    let charlie = accounts(4);
+
+    setup_allocation(&bob, &charlie, ONE_NEAR, contract.id()).await?;
+
+    let stake_tx = alice
+        .call(contract.id(), "stake")
+        .args_json(json!({
+            "amount": U128::from(ONE_NEAR),
+        }))
+        .deposit(NearToken::from_near(1))
+        .gas(Gas::from_tgas(300))
+        .transact();
+
+    let distribute_tx = bob
+        .call(contract.id(), "distribute_rewards")
+        .args_json(json!({
+            "recipient": charlie,
+            "in_near": false,
+        }))
+        .transact();
+
+    let (stake_tx_result, distribute_tx_result) = try_join!(stake_tx, distribute_tx)?;
+
+    // verify that the distribute_rewards tx failed because the stake tx locked the contract
+    assert!(stake_tx_result.is_success());
+    assert!(distribute_tx_result.is_failure());
+    check_error_msg(distribute_tx_result, "Contract is currently executing");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_distribute_all_with_contract_not_in_sync_fails(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let (owner, sandbox, contract, _) = setup_contract_with_pool().await?;
+    let alice = setup_whitelisted_user(&owner, &contract, "alice").await?;
+    let bob = accounts(4);
+    let charlie = accounts(5);
+    setup_allocation(&alice, &bob, 2 * ONE_NEAR, contract.id()).await?;
+    setup_allocation(&alice, &charlie, 4 * ONE_NEAR, contract.id()).await?;
+
+    move_epoch_forward(&sandbox, &contract).await?;
+
+    let result = alice
+        .call(contract.id(), "distribute_all")
+        .args_json(json!({
+            "in_near": false,
+        }))
+        .transact()
+        .await?;
+
+    assert!(result.is_failure());
+    check_error_msg(result, "Contract is not in sync");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_distribute_all_with_locked_contract_should_fail(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let (owner, _, contract, _) = setup_contract_with_pool().await?;
+    let alice = setup_whitelisted_user(&owner, &contract, "alice").await?;
+    let bob = setup_whitelisted_user(&owner, &contract, "bob").await?;
+    let charlie = accounts(4);
+
+    setup_allocation(&bob, &charlie, ONE_NEAR, contract.id()).await?;
+
+    let stake_tx = alice
+        .call(contract.id(), "stake")
+        .args_json(json!({
+            "amount": U128::from(ONE_NEAR),
+        }))
+        .deposit(NearToken::from_near(1))
+        .gas(Gas::from_tgas(300))
+        .transact();
+
+    let distribute_all_tx = bob
+        .call(contract.id(), "distribute_all")
+        .args_json(json!({
+            "in_near": false,
+        }))
+        .transact();
+
+    let (stake_tx_result, distribute_all_tx_result) = try_join!(stake_tx, distribute_all_tx)?;
+
+    // verify that the distribute_all tx failed because the stake tx locked the contract
+    assert!(stake_tx_result.is_success());
+    assert!(distribute_all_tx_result.is_failure());
+    check_error_msg(distribute_all_tx_result, "Contract is currently executing");
 
     Ok(())
 }

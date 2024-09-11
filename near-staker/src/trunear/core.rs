@@ -1,4 +1,4 @@
-use near_contract_standards::fungible_token::FungibleTokenCore;
+use near_contract_standards::fungible_token::{FungibleTokenCore, FungibleTokenResolver};
 use near_sdk::json_types::U128;
 use near_sdk::{near, AccountId, PromiseOrValue};
 
@@ -32,5 +32,22 @@ impl FungibleTokenCore for NearStaker {
     /// Returns the balance of the account. If the account doesn't exist it returns `"0"`.
     fn ft_balance_of(&self, account_id: AccountId) -> U128 {
         self.token.ft_balance_of(account_id)
+    }
+}
+
+#[near]
+impl FungibleTokenResolver for NearStaker {
+    #[private]
+    /// Callback used inside ft_transfer_call to handle the result of ft_on_transfer.
+    fn ft_resolve_transfer(
+        &mut self,
+        sender_id: AccountId,
+        receiver_id: AccountId,
+        amount: U128,
+    ) -> U128 {
+        self.token
+            .ft_resolve_transfer(sender_id, receiver_id, amount)
+            .0
+            .into()
     }
 }

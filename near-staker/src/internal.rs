@@ -2,7 +2,7 @@
 use near_contract_standards::fungible_token::events::{FtBurn, FtMint};
 use near_contract_standards::fungible_token::FungibleTokenCore;
 use near_sdk::{
-    env, json_types::U128, log, require, serde_json::json, AccountId, Gas, NearToken, Promise,
+    env, json_types::U128, log, require, serde_json::json, AccountId, NearToken, Promise,
 };
 
 use crate::constants::*;
@@ -100,13 +100,13 @@ impl NearStaker {
                 "deposit_and_stake".to_owned(),
                 NO_ARGS,
                 NearToken::from_yoctonear(amount),
-                Gas::from_tgas(30),
+                XCC_GAS,
             )
             .function_call(
                 "get_account_total_balance".to_owned(),
                 staker_arg,
                 NO_DEPOSIT,
-                XCC_GAS,
+                VIEW_GAS,
             )
             .then(
                 Self::ext(env::current_account_id())
@@ -135,11 +135,14 @@ impl NearStaker {
             Self::convert_to_shares(amount, share_price_num, share_price_denom, false);
         if shares_amount == 0 {
             log!("Failed to unstake: {}", ERR_UNSTAKE_AMOUNT_TOO_LOW);
+            self.is_locked = false;
             return Promise::new(caller).transfer(attached_near);
         }
 
-        // burn user shares
+        // burn user shares and update total staked to keep share price the same
         self.internal_burn(shares_amount, caller.clone());
+        self.total_staked -= amount;
+        self.tax_exempt_stake = self.tax_exempt_stake.saturating_sub(amount);
 
         // prepare unstake arguments
         let unstake_amount = json!({ "amount": NearToken::from_yoctonear(amount) })
@@ -197,6 +200,7 @@ impl NearStaker {
                     U128(shares_amount),
                     withdraw_occurred,
                     attached_near,
+                    env::epoch_height(),
                 ),
         )
     }
@@ -445,12 +449,7 @@ impl NearStaker {
 
         // calculate the distribution fee if applicable
         let fees = shares_to_move * (self.distribution_fee as u128) / (FEE_PRECISION as u128);
-
-        if fees > 0 {
-            shares_to_move -= fees;
-            self.token
-                .internal_transfer(&distributor, &self.treasury, fees, None);
-        }
+        shares_to_move -= fees;
 
         // calculate the amount of rewards in NEAR
         let near_amount = NearToken::from_yoctonear(Self::convert_to_assets(
@@ -488,6 +487,12 @@ impl NearStaker {
                 .internal_transfer(&distributor, &recipient, shares_to_move, None);
         }
 
+        // transfer fees to the treasury
+        if fees > 0 {
+            self.token
+                .internal_transfer(&distributor, &self.treasury, fees, None);
+        }
+
         // update the allocation and return the distribution info
         allocation.share_price_num = global_price_num;
         allocation.share_price_denom = global_price_denom;
@@ -512,10 +517,7 @@ impl NearStaker {
     ) -> u128 {
         // check if user has enough TruNEAR to unstake
         let max_withdraw = self.max_withdraw(caller.clone()).0;
-        require!(
-            self.max_withdraw(caller.clone()) >= U128(amount),
-            ERR_INVALID_UNSTAKE_AMOUNT
-        );
+        require!(max_withdraw >= amount, ERR_INVALID_UNSTAKE_AMOUNT);
 
         // if the user's remaining balance falls below one NEAR, unstake the entire user stake
         let unstake_amount = if max_withdraw - amount < ONE_NEAR {

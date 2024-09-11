@@ -366,6 +366,16 @@ pub async fn get_max_withdraw(
     Ok(response.0)
 }
 
+pub async fn get_is_locked(contract: Contract) -> Result<bool, Box<dyn std::error::Error>> {
+    let response = contract
+        .view("get_is_locked")
+        .await?
+        .json::<bool>()
+        .unwrap();
+
+    Ok(response)
+}
+
 pub async fn get_total_staked(
     contract: Contract,
 ) -> Result<(u128, u64), Box<dyn std::error::Error>> {
@@ -523,6 +533,16 @@ pub async fn get_current_epoch(contract: &Contract) -> Result<u64, Box<dyn std::
         .unwrap();
 
     Ok(response.current_epoch.0)
+}
+
+pub async fn get_treasury_id(contract: &Contract) -> Result<AccountId, Box<dyn std::error::Error>> {
+    let response = contract
+        .view("get_staker_info")
+        .await?
+        .json::<StakerInfo>()
+        .unwrap();
+
+    Ok(response.treasury_id)
 }
 
 pub async fn get_total_supply(contract: &Contract) -> Result<u128, Box<dyn std::error::Error>> {
