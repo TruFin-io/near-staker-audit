@@ -435,6 +435,17 @@ pub async fn get_share_price(contract: Contract) -> Result<u128, Box<dyn std::er
     Ok(share_price)
 }
 
+pub async fn get_ft_price(contract: Contract) -> Result<U128, Box<dyn std::error::Error>> {
+    let response = contract
+        .view("ft_price")
+        .args_json(json!({}))
+        .await?
+        .json::<U128>()
+        .unwrap();
+
+    Ok(response)
+}
+
 pub async fn share_price_fraction(
     contract: &Contract,
 ) -> Result<(U256, U256), Box<dyn std::error::Error>> {
