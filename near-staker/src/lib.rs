@@ -346,6 +346,17 @@ impl NearStaker {
         (num.to_string(), denom.to_string())
     }
 
+    /// Returns the current TruNEAR share price in NEAR as a 24 decimal number.
+    pub fn ft_price(&self) -> U128 {
+        let (num, denom) = Self::internal_share_price(
+            self.total_staked,
+            self.token.ft_total_supply().0,
+            self.tax_exempt_stake,
+            self.fee,
+        );
+        U128(u128::try_from(num / denom).unwrap())
+    }
+
     /// Returns the maximum amount of NEAR a user can withdraw from the vault, rounding the result up.
     pub fn max_withdraw(&self, account_id: AccountId) -> U128 {
         let (share_price_num, share_price_denom) = Self::internal_share_price(

@@ -50,6 +50,61 @@ async fn test_share_price_increases_with_rewards() -> Result<(), Box<dyn std::er
 }
 
 #[tokio::test]
+async fn test_ft_price_initial_value() -> Result<(), Box<dyn std::error::Error>> {
+    let (_, _, contract) = setup_contract().await?;
+
+    let ft_price = contract
+        .view("ft_price")
+        .args_json(json!({}))
+        .await?
+        .json::<U128>()
+        .unwrap();
+
+    assert_eq!(ft_price.0, SHARE_PRICE_SCALING_FACTOR);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_ft_price_increases_with_rewards_and_stake() -> Result<(), Box<dyn std::error::Error>>
+{
+    let (owner, sandbox, contract, _) = setup_contract_with_pool().await?;
+    let alice = owner
+        .create_subaccount("alice")
+        .initial_balance(NearToken::from_near(100000000))
+        .transact()
+        .await?
+        .unwrap();
+
+    let _ = owner
+        .call(contract.id(), "add_user_to_whitelist")
+        .args_json(json!({
+            "user_id": alice.id(),
+        }))
+        .transact()
+        .await?;
+
+    let _ = stake(&contract, alice.clone(), 10000000).await?;
+    let ft_price_first_epoch = get_ft_price(contract.clone()).await?;
+    let share_price_first_epoch = get_share_price(contract.clone()).await?;
+    assert_eq!(ft_price_first_epoch.0, share_price_first_epoch);
+
+    move_epoch_forward_and_update_total_staked(&sandbox, &contract, owner.clone()).await?;
+    let ft_price_second_epoch = get_ft_price(contract.clone()).await?;
+    let share_price_second_epoch = get_share_price(contract.clone()).await?;
+    assert_eq!(ft_price_second_epoch.0, share_price_second_epoch);
+    assert!(ft_price_second_epoch > ft_price_first_epoch);
+
+    move_epoch_forward_and_update_total_staked(&sandbox, &contract, owner.clone()).await?;
+    let ft_price_third_epoch = get_ft_price(contract.clone()).await?;
+    let share_price_third_epoch = get_share_price(contract.clone()).await?;
+    assert_eq!(ft_price_third_epoch.0, share_price_third_epoch);
+    assert!(ft_price_third_epoch > ft_price_second_epoch);
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn test_max_withdraw_initial_value() -> Result<(), Box<dyn std::error::Error>> {
     let (_, _, contract) = setup_contract().await?;
     let alice = accounts(0);
