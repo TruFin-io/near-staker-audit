@@ -44,21 +44,12 @@ pub struct FungibleTokenMetadata {
     pub decimals: u8,
 }
 
-#[derive(Deserialize, Serialize, Debug)]
-pub struct AllocationInfo {
-    pub recipient: AccountId,
-    pub near_amount: U128,
-    pub share_price_num: String,
-    pub share_price_denom: String,
-}
-
 #[derive(Deserialize, Serialize, PartialEq, Debug)]
 pub struct StakerInfo {
     pub owner_id: AccountId,
     pub treasury_id: AccountId,
     pub default_delegation_pool: AccountId,
     pub fee: u16,
-    pub dist_fee: u16,
     pub min_deposit: U128,
     pub is_paused: bool,
     pub current_epoch: U64,

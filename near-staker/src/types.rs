@@ -37,7 +37,6 @@ pub struct StakerInfo {
     pub treasury_id: AccountId,
     pub default_delegation_pool: AccountId,
     pub fee: u16,
-    pub dist_fee: u16,
     pub min_deposit: U128,
     pub is_paused: bool,
     pub current_epoch: U64,
@@ -67,23 +66,6 @@ pub struct PoolInfo {
 #[derive(Clone, Copy, Default)]
 pub struct Allocation {
     pub near_amount: u128,
-    pub share_price_num: U256,
-    pub share_price_denom: U256,
-}
-
-#[near(serializers = [json, borsh])]
-pub struct AllocationInfo {
-    pub recipient: AccountId,
-    pub near_amount: U128,
-    pub share_price_num: String,
-    pub share_price_denom: String,
-}
-
-pub(crate) struct DistributionInfo {
-    pub near_amount: u128,
-    pub shares_amount: u128,
-    pub refund_amount: u128,
-    pub fees: u128,
     pub share_price_num: U256,
     pub share_price_denom: U256,
 }

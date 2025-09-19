@@ -2,27 +2,13 @@
 
 The TruFin NEAR staking vault offers users a reliable way of staking NEAR on the NEAR network.
 On staking NEAR via the vault, users receive a receipt in the form of the **rewards bearing TruNEAR token**.
-In addition to the liquid staking functionality, the TruFin staker supports delegating to different pools as well as the allocation of rewards to different parties.
-We briefly present these 2 features as well as share some notes that explain the rationale for some of our decisions.
+In addition to the liquid staking functionality, the TruFin staker supports delegating to different pools.
 
 ## Whitelist
 
 Users of our vault must be whitelisted to ensure they have completed offline AML/KYC checks and other onboarding requirements.
 The contract will verify if the user is included in our whitelist at the time operations such as staking, unstaking, and others are performed.
 The use of a whitelist grants TruFin permission to revoke a whitelist status for a malicious user in order to protect the overall integrity of the protocol.
-
-## Allocations
-
-Each user (then called the *distributor*) can opt to send some or all of the rewards from staking NEAR to another user or wallet address (the *recipient*).  
-This additional functionality of allocating staking rewards to a third party can be described by three core functions within our smart contract architecture:
-
-- `allocate` adds an amount of NEAR from a distributor to a recipient at the current share price.
-- `deallocate` removes part or the entire amount allocated to a recipient from the distributors allocations list. It reduces the distributor's total allocated amount.
-- `distribute_rewards` and `distribute_all` are used to distribute the rewards from an allocation to the corresponding recipients. The distribution can be made in NEAR or TruNEAR and comes out of the distributor's wallet.
-
-**Notes:**
-The distributor doesn't need to have funds for rewards available at all times in their wallet. The allocation feature keeps track of allocations made but doesn't enforce distribution or solvency.
-Similarly, the distributor can allocate more than their actual balance.
 
 ## Multi-delegation pools support
 
@@ -53,7 +39,6 @@ This prevents adding an invalid owner, that would render the contract without an
 ## Note on minimum deposits
 
 We require users to stake a minimum of 1 NEAR every time. 
-We also enforce a minimum of 1 NEAR on every allocation.
 As we're dealing with institutional clients, we don't expect this to be a problem.  
 By design, there is no maximum limit to how much can be deposited by a single user.
 
@@ -85,8 +70,8 @@ In the unlikely event that this process has not yet run in the current epoch, us
 
 ## Note on storage staking
 
-We require users to attach a small amount of NEAR to pay for storage associated with new allocations and unstake operations.
-These storage deposits get refunded when users delete their allocations and withdraw their unstaked funds.
+We require users to attach a small amount of NEAR to pay for storage associated with new unstake operations.
+These storage deposits get refunded when users withdraw their unstaked funds.
 
 # Staker flowchart
 

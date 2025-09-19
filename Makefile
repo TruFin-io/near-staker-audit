@@ -1,6 +1,7 @@
 RFLAGS="-C link-arg=-s"
 
 build-staker:
+	rustup override	set 1.79.0
 	rustup target add wasm32-unknown-unknown
 	RUSTFLAGS=$(RFLAGS) cargo build -p near-staker --target wasm32-unknown-unknown --release
 	mkdir -p res
@@ -12,6 +13,9 @@ test-staker: build-staker
 
 build: build-staker
 test: test-staker
+
+check-coverage: test
+	DYLD_LIBRARY_PATH="`pwd`/target/debug/deps" cargo tarpaulin --all-features --skip-clean --out Html --output-dir coverage-report
 
 clean:
 	cargo clean

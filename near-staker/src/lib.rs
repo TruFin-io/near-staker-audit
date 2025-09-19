@@ -42,11 +42,9 @@ pub struct NearStaker {
     pub default_delegation_pool: AccountId,
     /// Boolean flag indicating whether the contract is currently paused for user operations.
     pub is_paused: bool,
-    /// Both the fee and distribution fee are percentages with FEE_PRECISION digits of precision i.e. 1000 = 10%.
+    /// The fee is a percentage with FEE_PRECISION digits of precision i.e. 1000 = 10%.
     /// The treasury fee charged on staking rewards.
     pub fee: u16,
-    /// The treasury distribution fee charged upon distributing allocation rewards.
-    pub distribution_fee: u16,
     /// The minimum NEAR amount a user can deposit.
     pub min_deposit: u128,
     /// The delegation pools.
@@ -57,8 +55,6 @@ pub struct NearStaker {
     pub total_staked: u128,
     /// Epoch when total_staked was last updated.
     pub total_staked_last_updated_at: u64,
-    /// Allocations.
-    allocations: LookupMap<AccountId, HashMap<AccountId, Allocation>>,
     /// Unstake requests.
     unstake_requests: LookupMap<u128, UnstakeRequest>,
     /// The most recent unstake nonce.
@@ -106,7 +102,6 @@ impl NearStaker {
             treasury: &treasury,
             default_delegation_pool: &default_delegation_pool,
             fee: &0,
-            distribution_fee: &0,
             min_deposit: &U128::from(ONE_NEAR),
         }
         .emit();
@@ -122,11 +117,9 @@ impl NearStaker {
             default_delegation_pool: default_delegation_pool.clone(),
             is_paused: false,
             fee: 0,
-            distribution_fee: 0,
             min_deposit: ONE_NEAR,
             delegation_pools,
             delegation_pools_list: vec![default_delegation_pool],
-            allocations: LookupMap::new(b"a".to_vec()),
             unstake_requests: LookupMap::new(b"u".to_vec()),
             unstake_nonce: 0,
             total_staked: 0,
@@ -199,125 +192,12 @@ impl NearStaker {
         self.unstake_nonce.into()
     }
 
-    /// Returns the allocation and unstake storage cost
+    /// Returns the unstake storage cost
     pub fn get_storage_cost() -> U128 {
         env::storage_byte_cost()
             .saturating_mul(STORAGE_BYTES)
             .as_yoctonear()
             .into()
-    }
-
-    /// Returns all allocations for a given user.
-    pub fn get_allocations(&self, allocator: AccountId) -> Vec<AllocationInfo> {
-        self.allocations
-            .get(&allocator)
-            .expect(ERR_NO_ALLOCATIONS)
-            .iter()
-            .map(|(recipient, allocation)| AllocationInfo {
-                recipient: recipient.clone(),
-                near_amount: allocation.near_amount.into(),
-                share_price_num: allocation.share_price_num.to_string(),
-                share_price_denom: allocation.share_price_denom.to_string(),
-            })
-            .collect()
-    }
-
-    /// Returns the total amount of NEAR allocated by a user and their average allocation share price.
-    pub fn get_total_allocated(&self, allocator: AccountId) -> (U128, String, String) {
-        let total_allocation = match self.allocations.get(&allocator) {
-            Some(user_allocations) => {
-                user_allocations
-                    .iter()
-                    .map(|(_, allocation)| allocation)
-                    .fold(Allocation::default(), |acc, allocation| {
-                        // this can only be true for the first iteration
-                        if acc.near_amount == 0 {
-                            *allocation
-                        } else {
-                            Self::calculate_updated_allocation(
-                                &acc,
-                                allocation.near_amount,
-                                allocation.share_price_num,
-                                allocation.share_price_denom,
-                            )
-                        }
-                    })
-            }
-
-            None => Allocation::default(),
-        };
-
-        (
-            total_allocation.near_amount.into(),
-            total_allocation.share_price_num.to_string(),
-            total_allocation.share_price_denom.to_string(),
-        )
-    }
-
-    /// Returns the amounts of TruNEAR and NEAR required to distribute to a single recipient
-    /// or to all recipients when no recipient account is provided.
-    pub fn get_rewards_distribution_amounts(
-        &self,
-        distributor: &AccountId,
-        recipient: Option<AccountId>,
-        in_near: bool,
-    ) -> (U128, U128) {
-        let user_allocations = self.allocations.get(distributor);
-
-        // if the distributor has no allocations no TruNEAR or NEAR is needed
-        if user_allocations.is_none() {
-            return (U128(0), U128(0));
-        };
-
-        let (global_price_num, global_price_denom) = Self::internal_share_price(
-            self.total_staked,
-            self.ft_total_supply().0,
-            self.tax_exempt_stake,
-            self.fee,
-        );
-
-        let required_shares;
-        if let Some(r) = recipient {
-            // calculate the amount of shares required to distribute to a single recipient
-            let allocation = user_allocations
-                .unwrap()
-                .get(&r)
-                .expect(ERR_NO_ALLOCATIONS_TO_RECIPIENT);
-
-            required_shares = Self::internal_calculate_distribution_amount(
-                allocation,
-                global_price_num,
-                global_price_denom,
-            );
-        } else {
-            // calculate the amount of shares required to distribute to all recipients
-            required_shares = user_allocations
-                .unwrap()
-                .iter()
-                .map(|(_, allocation)| allocation)
-                .fold(0, |acc, a| {
-                    acc + Self::internal_calculate_distribution_amount(
-                        a,
-                        global_price_num,
-                        global_price_denom,
-                    )
-                });
-        }
-
-        if in_near {
-            // for NEAR distributions fees are deducted from the required NEAR amount and accounted as required TruNEAR
-            let fees = required_shares * (self.distribution_fee as u128) / (FEE_PRECISION as u128);
-            let required_near = Self::convert_to_assets(
-                required_shares - fees,
-                global_price_num,
-                global_price_denom,
-                false,
-            );
-            (U128::from(fees), U128::from(required_near))
-        } else {
-            // for TruNEAR distributions the required TruNEAR amount includes the distribution fees
-            (U128::from(required_shares), U128(0))
-        }
     }
 
     /// Returns some of the Staker internal state
@@ -327,7 +207,6 @@ impl NearStaker {
             treasury_id: self.treasury.clone(),
             default_delegation_pool: self.default_delegation_pool.clone(),
             fee: self.fee,
-            dist_fee: self.distribution_fee,
             min_deposit: U128::from(self.min_deposit),
             is_paused: self.is_paused,
             current_epoch: env::epoch_height().into(),
@@ -443,18 +322,6 @@ impl NearStaker {
         }
         .emit();
         self.fee = new_fee;
-    }
-
-    /// Sets the treasury fee charged on rewards distribution.
-    pub fn set_distribution_fee(&mut self, new_distribution_fee: u16) {
-        self.check_owner();
-        require!(new_distribution_fee < FEE_PRECISION, ERR_FEE_TOO_LARGE);
-        Event::SetDistributionFeeEvent {
-            old_distribution_fee: &self.distribution_fee,
-            new_distribution_fee: &new_distribution_fee,
-        }
-        .emit();
-        self.distribution_fee = new_distribution_fee;
     }
 
     /// Sets a given pool as the new default delegation pool.
@@ -669,324 +536,6 @@ impl NearStaker {
         self.internal_unstake(pool_id, amount.0, env::predecessor_account_id())
     }
 
-    /// Allocates NEAR staking rewards to a recipient. Requires a storage deposit for new allocations
-    /// that is refunded upon deallocation.
-    #[payable]
-    pub fn allocate(&mut self, recipient: AccountId, amount: U128) {
-        self.check_not_paused();
-        self.check_whitelisted();
-        self.check_contract_in_sync();
-        self.check_not_locked();
-
-        let allocator = env::predecessor_account_id();
-        let amount = amount.0;
-
-        require!(recipient != allocator, ERR_INVALID_RECIPIENT);
-        require!(amount >= ONE_NEAR, ERR_ALLOCATION_UNDER_ONE_NEAR);
-
-        let (global_share_price_num, global_share_price_denom) = Self::internal_share_price(
-            self.total_staked,
-            self.token.ft_total_supply().0,
-            self.tax_exempt_stake,
-            self.fee,
-        );
-
-        let mut storage_cost = NearToken::from_near(0);
-        let attached_deposit = env::attached_deposit();
-
-        let allocation = self
-            .allocations
-            .entry(allocator.clone())
-            .or_default() // fetches the users allocations or creates a new hashmap
-            .entry(recipient.clone()) //fetches the allocation to the recipient
-            .and_modify(|allocation| {
-                //updates the recipients allocation if it exists
-                *allocation = Self::calculate_updated_allocation(
-                    allocation,
-                    amount,
-                    global_share_price_num,
-                    global_share_price_denom,
-                )
-            })
-            .or_insert_with(|| {
-                storage_cost = NearToken::from_yoctonear(Self::get_storage_cost().0);
-                if attached_deposit < storage_cost {
-                    env::panic_str(ERR_STORAGE_DEPOSIT_TOO_SMALL);
-                }
-                Allocation {
-                    // inserts a new allocation if one doesn't exist for this recipient
-                    near_amount: amount,
-                    share_price_num: global_share_price_num,
-                    share_price_denom: global_share_price_denom,
-                }
-            });
-
-        let updated_allocation = *allocation;
-        let (
-            total_allocated_amount,
-            total_allocated_share_price_num,
-            total_allocated_share_price_denom,
-        ) = self.get_total_allocated(allocator.clone());
-
-        // refund any excess NEAR to allocator
-        if attached_deposit > storage_cost {
-            Promise::new(allocator.clone())
-                .transfer(attached_deposit.checked_sub(storage_cost).unwrap());
-        }
-
-        // emit event
-        Event::AllocatedEvent {
-            user: &allocator,
-            recipient: &recipient,
-            amount: &amount.into(),
-            total_amount: &updated_allocation.near_amount.into(),
-            share_price_num: &updated_allocation.share_price_num.to_string(),
-            share_price_denom: &updated_allocation.share_price_denom.to_string(),
-            total_allocated_amount: &total_allocated_amount,
-            total_allocated_share_price_num: &total_allocated_share_price_num,
-            total_allocated_share_price_denom: &total_allocated_share_price_denom,
-        }
-        .emit();
-    }
-
-    /// Deallocates NEAR staking rewards from a recipient.
-    pub fn deallocate(&mut self, recipient: AccountId, amount: U128) {
-        self.check_not_paused();
-        self.check_whitelisted();
-
-        let deallocator = env::predecessor_account_id();
-        let user_allocations = self
-            .allocations
-            .get_mut(&deallocator)
-            .expect(ERR_NO_ALLOCATIONS);
-
-        let allocation = user_allocations
-            .get_mut(&recipient)
-            .expect(ERR_NO_ALLOCATIONS_TO_RECIPIENT);
-
-        require!(
-            amount.0 <= allocation.near_amount,
-            ERR_EXCESSIVE_DEALLOCATION
-        );
-
-        let remaining_amount = allocation.near_amount - amount.0;
-        let share_price_num = allocation.share_price_num;
-        let share_price_denom = allocation.share_price_denom;
-
-        if remaining_amount == 0 {
-            user_allocations.remove(&recipient);
-            // refund the storage cost to the deallocator
-            Promise::new(deallocator.clone())
-                .transfer(NearToken::from_yoctonear(Self::get_storage_cost().0));
-        } else {
-            require!(remaining_amount >= ONE_NEAR, ERR_ALLOCATION_UNDER_ONE_NEAR);
-            allocation.near_amount = remaining_amount;
-        }
-
-        let (
-            total_allocated_amount,
-            total_allocated_share_price_num,
-            total_allocated_share_price_denom,
-        ) = self.get_total_allocated(deallocator.clone());
-
-        // emit event
-        Event::DeallocatedEvent {
-            user: &deallocator,
-            recipient: &recipient,
-            amount: &amount,
-            total_amount: &remaining_amount.into(),
-            share_price_num: &share_price_num.to_string(),
-            share_price_denom: &share_price_denom.to_string(),
-            total_allocated_amount: &total_allocated_amount,
-            total_allocated_share_price_num: &total_allocated_share_price_num,
-            total_allocated_share_price_denom: &total_allocated_share_price_denom,
-        }
-        .emit();
-    }
-
-    #[payable]
-    /// Distributes NEAR staking rewards to a recipient. When distributing rewards in NEAR, the distributor must attach the full amount.
-    pub fn distribute_rewards(&mut self, recipient: AccountId, in_near: bool) {
-        self.check_not_paused();
-        self.check_whitelisted();
-        self.check_contract_in_sync();
-        self.check_not_locked();
-
-        let distributor = env::predecessor_account_id();
-
-        let user_allocations = self
-            .allocations
-            .get(&distributor)
-            .expect(ERR_NO_ALLOCATIONS);
-
-        require!(
-            user_allocations.contains_key(&recipient),
-            ERR_NO_ALLOCATIONS_TO_RECIPIENT
-        );
-
-        let (global_price_num, global_price_denom) = Self::internal_share_price(
-            self.total_staked,
-            self.token.total_supply,
-            self.tax_exempt_stake,
-            self.fee,
-        );
-        let attached_near = env::attached_deposit();
-
-        let distribution_info_result = self.internal_distribute(
-            distributor.clone(),
-            recipient.clone(),
-            global_price_num,
-            global_price_denom,
-            in_near,
-            attached_near,
-        );
-
-        match distribution_info_result {
-            Err(error) => {
-                env::panic_str(error.to_string().as_str());
-            }
-            Ok(distribution_info_opt) => {
-                if distribution_info_opt.is_none() {
-                    log!("No rewards to distribute");
-                    if attached_near.as_yoctonear() > 0 {
-                        Promise::new(distributor.clone()).transfer(attached_near);
-                    }
-                    return;
-                }
-
-                // refund any excess NEAR to distributor
-                let distribution_info = distribution_info_opt.unwrap();
-                if distribution_info.refund_amount > 0 {
-                    Promise::new(distributor.clone())
-                        .transfer(NearToken::from_yoctonear(distribution_info.refund_amount));
-                }
-
-                let (
-                    total_allocated_amount,
-                    total_allocated_share_price_num,
-                    total_allocated_share_price_denom,
-                ) = self.get_total_allocated(distributor.clone());
-
-                // emit Distribute Rewards event
-                Event::DistributedRewardsEvent {
-                    user: distributor.clone(),
-                    recipient: recipient.clone(),
-                    shares: U128(distribution_info.shares_amount),
-                    near_amount: U128(distribution_info.near_amount),
-                    user_balance: self.ft_balance_of(distributor),
-                    recipient_balance: self.ft_balance_of(recipient),
-                    fees: distribution_info.fees.into(),
-                    treasury_balance: self.ft_balance_of(self.treasury.clone()),
-                    share_price_num: distribution_info.share_price_num.to_string(),
-                    share_price_denom: distribution_info.share_price_denom.to_string(),
-                    in_near,
-                    total_allocated_amount,
-                    total_allocated_share_price_num,
-                    total_allocated_share_price_denom,
-                }
-                .emit();
-            }
-        }
-    }
-
-    #[payable]
-    /// Distributes NEAR staking rewards to all recipients.
-    pub fn distribute_all(&mut self, in_near: bool) {
-        self.check_not_paused();
-        self.check_whitelisted();
-        self.check_contract_in_sync();
-        self.check_not_locked();
-
-        // check if distributor has allocations
-        let distributor = env::predecessor_account_id();
-        require!(
-            self.allocations.contains_key(&distributor),
-            ERR_NO_ALLOCATIONS
-        );
-
-        // ensure distributor has enough NEAR and TruNEAR to complete the distribution
-        let (required_shares, required_near) =
-            self.get_rewards_distribution_amounts(&distributor, None, in_near);
-        if self.ft_balance_of(distributor.clone()).0 < required_shares.0 {
-            env::panic_str(ERR_INSUFFICIENT_TRUNEAR_BALANCE);
-        }
-        if env::attached_deposit().as_yoctonear() < required_near.0 {
-            env::panic_str(ERR_INSUFFICIENT_NEAR_BALANCE);
-        }
-
-        let (total_allocated_amount, _, _) = self.get_total_allocated(distributor.clone());
-
-        let (global_price_num, global_price_denom) = Self::internal_share_price(
-            self.total_staked,
-            self.token.total_supply,
-            self.tax_exempt_stake,
-            self.fee,
-        );
-
-        // this holds the amount of NEAR we will need to refund to the distributor at the end of the distribution
-        let mut refund_near_amount = env::attached_deposit();
-
-        let distributor_allocations = self.allocations.get(&distributor).cloned().unwrap();
-
-        let mut distributed_rewards_events: Vec<Event> = vec![];
-
-        distributor_allocations.keys().for_each(|recipient| {
-            let distribution_info_result = self.internal_distribute(
-                distributor.clone(),
-                recipient.clone(),
-                global_price_num,
-                global_price_denom,
-                in_near,
-                refund_near_amount,
-            );
-
-            match distribution_info_result {
-                Err(error) => {
-                    log!("Error distributing rewards: {}", error);
-                }
-                Ok(distribution_info_opt) => {
-                    match distribution_info_opt {
-                        None => log!("No rewards to distribute to {}", recipient),
-                        Some(distribution_info) => {
-                            // update the near amount left for the next distribution
-                            refund_near_amount =
-                                NearToken::from_yoctonear(distribution_info.refund_amount);
-                            distributed_rewards_events.push(Event::DistributedRewardsEvent {
-                                user: distributor.clone(),
-                                recipient: recipient.clone(),
-                                shares: U128(distribution_info.shares_amount),
-                                near_amount: U128(distribution_info.near_amount),
-                                user_balance: self.ft_balance_of(distributor.clone()),
-                                recipient_balance: self.ft_balance_of(recipient.clone()),
-                                fees: distribution_info.fees.into(),
-                                treasury_balance: self.ft_balance_of(self.treasury.clone()),
-                                share_price_num: distribution_info.share_price_num.to_string(),
-                                share_price_denom: distribution_info.share_price_denom.to_string(),
-                                in_near,
-                                total_allocated_amount,
-                                total_allocated_share_price_num: global_price_num.to_string(),
-                                total_allocated_share_price_denom: global_price_denom.to_string(),
-                            });
-                        }
-                    };
-                }
-            }
-        });
-
-        // refund any excess NEAR to distributor
-        if refund_near_amount.as_yoctonear() > 0 {
-            Promise::new(distributor.clone()).transfer(refund_near_amount);
-        }
-
-        // emit DistributedRewardsEvent events
-        distributed_rewards_events
-            .iter()
-            .for_each(|event| event.emit());
-
-        // emit DistributedAllEvent
-        Event::DistributedAllEvent { user: &distributor }.emit();
-    }
-
     /// Withdraws the unstaked amount associated with the unstake_nonce.
     pub fn withdraw(&mut self, unstake_nonce: U128) -> Option<Promise> {
         self.check_not_paused();
@@ -1190,7 +739,7 @@ impl NearStaker {
         self.unstake_requests
             .insert(self.unstake_nonce, unstake_request);
 
-        // refund any excess NEAR to allocator
+        // refund any excess NEAR to user
         let storage_cost = NearToken::from_yoctonear(Self::get_storage_cost().0);
         if attached_near > storage_cost {
             Promise::new(caller.clone()).transfer(attached_near.checked_sub(storage_cost).unwrap());

@@ -59,7 +59,6 @@ fn test_staker_initialised_event() {
         accounts(2)
     );
     assert_eq!(data[0]["fee"].as_u64().unwrap() as u16, 0);
-    assert_eq!(data[0]["distribution_fee"].as_u64().unwrap() as u16, 0);
     assert_eq!(
         data[0]["min_deposit"].as_str().unwrap(),
         "1000000000000000000000000"
@@ -160,57 +159,6 @@ fn test_set_fee_above_fee_precision_fails() {
     check_error_message(
         std::panic::catch_unwind(move || {
             staker.set_fee(FEE_PRECISION + 1);
-        }),
-        "Fee cannot be larger than fee precision",
-    );
-}
-
-#[test]
-fn test_set_distribution_fee() {
-    // sign as owner
-    specify_signer(0);
-    let mut staker = NearStaker::new(accounts(0), accounts(1), accounts(2));
-    let new_distribution_fee: u16 = 200;
-
-    staker.set_distribution_fee(new_distribution_fee);
-
-    assert_eq!(staker.distribution_fee, new_distribution_fee);
-
-    // assert event was emitted
-    let (data, event) = fetch_event(&get_logs()[1]);
-
-    assert_eq!(event, "set_distribution_fee_event");
-    assert_eq!(
-        data[0]["new_distribution_fee"].as_u64().unwrap() as u16,
-        new_distribution_fee
-    );
-    assert_eq!(data[0]["old_distribution_fee"].as_u64().unwrap() as u16, 0);
-}
-
-#[test]
-fn test_set_distribution_fee_called_by_non_owner_fails() {
-    // sign as non-owner
-    specify_signer(4);
-    let mut staker = NearStaker::new(accounts(0), accounts(1), accounts(2));
-    // non-owner tries to call only-owner method
-    // non-owner tries to call only-owner method
-    check_error_message(
-        std::panic::catch_unwind(move || {
-            staker.set_distribution_fee(40);
-        }),
-        "Only the owner can call this method",
-    );
-}
-
-#[test]
-fn test_set_distribution_fee_above_fee_precision_fails() {
-    specify_signer(0);
-    let mut staker = NearStaker::new(accounts(0), accounts(1), accounts(2));
-
-    // try to set fee above fee precision
-    check_error_message(
-        std::panic::catch_unwind(move || {
-            staker.set_distribution_fee(FEE_PRECISION + 1);
         }),
         "Fee cannot be larger than fee precision",
     );
@@ -883,45 +831,6 @@ fn test_mul_div_with_rounding_division_by_zero_fails() {
     let error = result.unwrap_err();
     let message = error.downcast_ref::<&str>().unwrap();
     assert_eq!(*message, "division by zero");
-}
-
-#[test]
-fn test_internal_calculate_distribution_amount_with_large_allocation() {
-    let global_share_price_num = U256::from(SHARE_PRICE_SCALING_FACTOR);
-    let global_share_price_denom = U256::from(1);
-    let allocation = Allocation {
-        near_amount: u128::MAX,
-        share_price_num: U256::from(SHARE_PRICE_SCALING_FACTOR),
-        share_price_denom: U256::from(2),
-    };
-    let dist_amount = NearStaker::internal_calculate_distribution_amount(
-        &allocation,
-        global_share_price_num,
-        global_share_price_denom,
-    );
-    assert_eq!(dist_amount, u128::MAX);
-}
-
-#[test]
-fn test_internal_calculate_distribution_amount_with_large_share_price() {
-    // Assume 20M deposit at a share price of 10.0
-    let global_share_price_num = U256::from_dec_str("200000000000000000000000000000000").unwrap()
-        * U256::from(FEE_PRECISION as u128)
-        * U256::from(SHARE_PRICE_SCALING_FACTOR);
-    let global_share_price_denom = U256::from_dec_str("20000000000000000000000000000000").unwrap()
-        * U256::from(FEE_PRECISION as u128);
-    let allocation = Allocation {
-        near_amount: u128::MAX,
-        share_price_num: U256::from(SHARE_PRICE_SCALING_FACTOR),
-        share_price_denom: U256::from(1),
-    };
-    let expected_result: u128 = 306254130228844617117037146688591390310;
-    let dist_amount = NearStaker::internal_calculate_distribution_amount(
-        &allocation,
-        global_share_price_num,
-        global_share_price_denom,
-    );
-    assert_eq!(dist_amount, expected_result);
 }
 
 #[test]
