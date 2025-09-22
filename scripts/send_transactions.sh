@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # This script provides a set of functions to interact with the NEAR staker contract.
-# These functions allow to whitelist users, stake NEAR tokens, allocate and deallocate funds, and view the staker contract state.
+# These functions allow to whitelist users, stake NEAR tokens and view the staker contract state.
 # You can use these functions to script sequences of transactions to test the staker contract.
 # 
 # How to run:
@@ -112,40 +112,6 @@ unstake_from_specific_pool() {
   return 0
 }
 
-allocate() {
-  local user=$1
-  local recipient=$2
-  local amount=$3
-
-  local zeros="000000000000000000000000"
-  near call $STAKER allocate "{\"recipient\": \"$recipient\", \"amount\": \"$amount$zeros\"}" --accountId $user --gas 300000000000000
-
-  if [ $? -ne 0 ]; then
-    print_error "User $user failed to allocate $amount NEAR to $recipient."
-    exit $?
-  fi
-  
-  print_success "User $user allocated $amount NEAR to $recipient."
-  return 0
-}
-
-deallocate() {
-  local user=$1
-  local recipient=$2
-  local amount=$3
-
-  local zeros="000000000000000000000000"
-  near call $STAKER deallocate "{\"recipient\": \"$recipient\", \"amount\": \"$amount$zeros\"}" --accountId $user --gas 300000000000000
-
-  if [ $? -ne 0 ]; then
-    print_error "User $user failed to deallocate $amount NEAR from $recipient."
-    exit $?
-  fi
-  
-  print_success "User $user deallocated $amount NEAR from $recipient."
-  return 0
-}
-
 update_total_staked() {
   local user=$1
 
@@ -166,52 +132,6 @@ withdraw() {
   near call $STAKER withdraw "{\"unstake_nonce\": \"$unstake_nonce\"}" --accountId $user --gas 300000000000000
 }
 
-distribute_rewards() {
-  local user=$1
-  local recipient=$2
-  local in_near
-  local attached_deposit
-  if [ "$3" == "IN_NEAR" ]; then
-      in_near="true"
-      attached_deposit="--amount $4"
-  else
-      in_near="false"
-  fi
-
-  near call $STAKER distribute_rewards "{\"recipient\": \"$recipient\", \"in_near\": $in_near}" $attached_deposit --accountId $user --gas 300000000000000
-
-  if [ $? -ne 0 ]; then
-    print_error "User $user failed to distribute_rewards to $recipient in_near $in_near."
-    exit $?
-  fi
-  
-  print_success "User $user distribute_rewards to $recipient in_near $in_near."
-  return 0
-}
-
-distribute_all() {
-  local user=$1
-  local in_near
-  local attached_deposit
-  if [ "$2" == "IN_NEAR" ]; then
-      in_near="true"
-      attached_deposit="--amount $3"
-  else
-      in_near="false"
-  fi
-
-  near call $STAKER distribute_all "{\"in_near\": $in_near}" $attached_deposit --accountId $user --gas 300000000000000
-
-  if [ $? -ne 0 ]; then
-    print_error "User $user failed to distribute_all $2."
-    exit $?
-  fi
-  
-  print_success "User $user called distribute_all $2 successfully."
-  return 0
-}
-
-
 ###### STAKER VIEW FUNCTIONS ######
 
 get_staker_info() {
@@ -230,12 +150,6 @@ max_withdraw() {
 get_share_price() {
     near view $STAKER share_price --networkId testnet
 }
-
-get_total_allocated() {
-    local user=$1
-    near view $STAKER get_total_allocated "{\"allocator\": \"$user\"}" --networkId testnet
-}
-
 
 ###### SEND TRANSACTIONS ######
 
@@ -265,29 +179,11 @@ unstake_from_specific_pool "carlo02.testnet" 5 $SECOND_DELEGATION_POOL
 ### Withdraw an unstake nonce ###
 withdraw "carlo01.testnet" 1
 
-### Allocate NEAR to users ###
-allocate "carlo01.testnet" "carlo02.testnet" 5
-allocate "carlo02.testnet" "carlo03.testnet" 5
-allocate "carlo02.testnet" "carlo04.testnet" 5
-
-### Deallocate NEAR from users ###
-deallocate "carlo01.testnet" "carlo02.testnet" 2
-deallocate "carlo02.testnet" "carlo01.testnet" 1
-
-
-### Distribute rewards ###
-distribute_rewards "carlo01.testnet" "carlo02.testnet"
-distribute_rewards "carlo02.testnet" "carlo01.testnet" IN_NEAR 1
-
-distribute_all "carlo03.testnet"
-distribute_all "carlo04.testnet" IN_NEAR 1
-
 ###### ACCESS STAKER STATE ######
 
 get_staker_info
 get_share_price
 get_total_staked
-get_total_allocated "carlo01.testnet"
 
 ### Get max withdraw for each user ###
 for user in "${users_to_whitelist[@]}"; do

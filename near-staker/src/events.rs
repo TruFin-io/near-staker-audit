@@ -22,7 +22,6 @@ pub enum Event<'a> {
         treasury: &'a AccountId,
         default_delegation_pool: &'a AccountId,
         fee: &'a u16,
-        distribution_fee: &'a u16,
         min_deposit: &'a U128,
     },
     SetTreasuryEvent {
@@ -36,10 +35,6 @@ pub enum Event<'a> {
     SetFeeEvent {
         old_fee: &'a u16,
         new_fee: &'a u16,
-    },
-    SetDistributionFeeEvent {
-        old_distribution_fee: &'a u16,
-        new_distribution_fee: &'a u16,
     },
     SetMinDepositEvent {
         old_min_deposit: &'a U128,
@@ -89,44 +84,6 @@ pub enum Event<'a> {
         epoch: &'a U64,
         pool_id: &'a AccountId,
     },
-    AllocatedEvent {
-        user: &'a AccountId,
-        recipient: &'a AccountId,
-        amount: &'a U128,
-        total_amount: &'a U128,
-        share_price_num: &'a String,
-        share_price_denom: &'a String,
-        total_allocated_amount: &'a U128,
-        total_allocated_share_price_num: &'a String,
-        total_allocated_share_price_denom: &'a String,
-    },
-    DeallocatedEvent {
-        user: &'a AccountId,
-        recipient: &'a AccountId,
-        amount: &'a U128,
-        total_amount: &'a U128,
-        share_price_num: &'a String,
-        share_price_denom: &'a String,
-        total_allocated_amount: &'a U128,
-        total_allocated_share_price_num: &'a String,
-        total_allocated_share_price_denom: &'a String,
-    },
-    DistributedRewardsEvent {
-        user: AccountId,
-        recipient: AccountId,
-        shares: U128,
-        near_amount: U128,
-        user_balance: U128,
-        recipient_balance: U128,
-        fees: U128,
-        treasury_balance: U128,
-        share_price_num: String,
-        share_price_denom: String,
-        in_near: bool,
-        total_allocated_amount: U128,
-        total_allocated_share_price_num: String,
-        total_allocated_share_price_denom: String,
-    },
     WithdrawalEvent {
         user: &'a AccountId,
         amount: &'a U128,
@@ -140,9 +97,6 @@ pub enum Event<'a> {
         share_price_num: &'a String,
         share_price_denom: &'a String,
         epoch: &'a U64,
-    },
-    DistributedAllEvent {
-        user: &'a AccountId,
     },
     // Whitelist events
     AgentAddedEvent {

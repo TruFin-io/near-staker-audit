@@ -36,7 +36,7 @@ if [ $? -ne 0 ]; then
 fi
 
 # encode the contract binary to base64
-base64 res/near_staker.wasm > near_staker_base64.txt
+base64 -i res/near_staker.wasm -o near_staker_base64.txt
 if [ $? -ne 0 ]; then
   print_error "Failed to produce the base64 encoded binary"
   exit $?

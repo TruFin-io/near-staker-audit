@@ -311,35 +311,6 @@ pub fn get_events(logs: Vec<&str>) -> Vec<serde_json::Value> {
         .collect::<Vec<serde_json::Value>>()
 }
 
-pub async fn setup_allocation(
-    allocator: &Account,
-    recipient: &AccountId,
-    amount: u128,
-    contract: &AccountId,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let stake = allocator
-        .call(contract, "stake")
-        .deposit(NearToken::from_near(5))
-        .gas(Gas::from_tgas(300))
-        .transact()
-        .await?;
-    assert!(stake.is_success());
-
-    let allocation = allocator
-        .call(contract, "allocate")
-        .args_json(json!({
-            "recipient": recipient,
-            "amount": U128::from(amount),
-        }))
-        .deposit(NearToken::from_near(1))
-        .transact()
-        .await?;
-
-    assert!(allocation.is_success());
-
-    Ok(())
-}
-
 pub fn check_error_msg(response: ExecutionFinalResult, error_message: &str) {
     assert!(response
         .into_result()
@@ -633,35 +604,6 @@ pub async fn unstake(
     Ok(unstake)
 }
 
-pub async fn get_total_allocated(
-    contract: &Contract,
-    user: &AccountId,
-) -> Result<(u128, u128, String, String), Box<dyn std::error::Error>> {
-    let (allocation_amount, share_price_num, share_price_denom) = contract
-        .view("get_total_allocated")
-        .args_json(json!({
-            "allocator": user,
-        }))
-        .await?
-        .json::<(U128, String, String)>()
-        .unwrap();
-
-    let num = U256::from_dec_str(&share_price_num).unwrap();
-    let denom = U256::from_dec_str(&share_price_denom).unwrap();
-    let share_price = if denom.as_u128() > 0 {
-        (num / denom).as_u128()
-    } else {
-        0
-    };
-
-    Ok((
-        allocation_amount.0,
-        share_price,
-        share_price_num,
-        share_price_denom,
-    ))
-}
-
 pub async fn increase_total_staked(
     contract: &Contract,
     owner: &Account,
@@ -704,23 +646,6 @@ pub async fn set_fee(
     Ok(())
 }
 
-pub async fn set_distribution_fee(
-    contract: &Contract,
-    owner: &Account,
-    amount: u128,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let result = owner
-        .call(contract.id(), "set_distribution_fee")
-        .args_json(json!({
-            "new_distribution_fee": amount,
-        }))
-        .transact()
-        .await?;
-    assert!(result.is_success());
-
-    Ok(())
-}
-
 pub async fn set_min_deposit(
     contract: &Contract,
     owner: &Account,
@@ -736,41 +661,6 @@ pub async fn set_min_deposit(
     assert!(result.is_success());
 
     Ok(())
-}
-
-pub async fn calculate_distribute_to_recipient_in_near(
-    contract: &Contract,
-    distributor: &AccountId,
-    recipient: &AccountId,
-) -> Result<u128, Box<dyn std::error::Error>> {
-    let response = contract
-        .view("get_rewards_distribution_amounts")
-        .args_json(json!({
-            "distributor": distributor.clone(),
-            "recipient": recipient.clone(),
-            "in_near": true,
-        }))
-        .await?
-        .json::<(U128, U128)>()
-        .unwrap();
-    Ok(response.1 .0)
-}
-
-pub async fn calculate_distribute_amounts(
-    contract: &Contract,
-    distributor: &AccountId,
-    in_near: bool,
-) -> Result<(u128, u128), Box<dyn std::error::Error>> {
-    let response = contract
-        .view("get_rewards_distribution_amounts")
-        .args_json(json!({
-            "distributor": distributor.clone(),
-            "in_near": in_near,
-        }))
-        .await?
-        .json::<(U128, U128)>()
-        .unwrap();
-    Ok((response.0 .0, response.1 .0))
 }
 
 pub async fn register_account(
@@ -814,19 +704,6 @@ pub async fn transfer_trunear(
     assert!(transfer.is_success());
 
     Ok(())
-}
-
-pub fn calculate_trunear_distribution_amount(
-    amount: u128,
-    pre_share_price_num: U256,
-    pre_share_price_denom: U256,
-    share_price_num: U256,
-    share_price_denom: U256,
-) -> u128 {
-    let lhs = U256::from(amount) * pre_share_price_denom / (pre_share_price_num / ONE_NEAR);
-    let rhs = U256::from(amount) * share_price_denom / (share_price_num / ONE_NEAR);
-    let trunear_amount = lhs - rhs;
-    trunear_amount.as_u128()
 }
 
 pub fn mul_div_with_rounding(x: U256, y: U256, denominator: U256, rounding_up: bool) -> U256 {

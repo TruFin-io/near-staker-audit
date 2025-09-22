@@ -340,7 +340,6 @@ async fn test_get_staker_info() -> Result<(), Box<dyn std::error::Error>> {
     let (owner, _, contract, default_pool) = setup_contract_with_pool().await?;
 
     set_fee(&contract, &owner, 100).await?;
-    set_distribution_fee(&contract, &owner, 500).await?;
     set_min_deposit(&contract, &owner, 10).await?;
 
     let staker_info = contract
@@ -356,7 +355,6 @@ async fn test_get_staker_info() -> Result<(), Box<dyn std::error::Error>> {
             treasury_id: accounts(1),
             default_delegation_pool: default_pool.id().clone(),
             fee: 100,
-            dist_fee: 500,
             min_deposit: U128(10 * ONE_NEAR),
             is_paused: false,
             current_epoch: U64(1),
@@ -619,23 +617,6 @@ async fn test_is_claimable_from_disabled_validator() -> Result<(), Box<dyn std::
         .unwrap();
 
     assert!(claimable);
-
-    Ok(())
-}
-
-#[tokio::test]
-async fn test_get_allocations_fails_with_user_has_no_allocations(
-) -> Result<(), Box<dyn std::error::Error>> {
-    let (owner, _, contract) = setup_contract().await?;
-    let alice = setup_whitelisted_user(&owner, &contract, "alice").await?;
-
-    contract
-        .view("get_allocations")
-        .args_json(json!({
-           "allocator": alice.id(),
-        }))
-        .await
-        .expect_err("User has no allocations");
 
     Ok(())
 }

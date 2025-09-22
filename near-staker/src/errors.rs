@@ -27,17 +27,10 @@ pub const ERR_POOL_ALREADY_DISABLED: &str = "Delegation pool already disabled";
 pub const ERR_POOL_NOT_ENABLED: &str = "Delegation pool not enabled";
 pub const ERR_INSUFFICIENT_FUNDS_ON_POOL: &str = "Insufficient funds on delegation pool";
 
-// allocation errors
-pub const ERR_ALLOCATION_UNDER_ONE_NEAR: &str = "Allocated amount must be at least 1 NEAR";
-pub const ERR_INVALID_RECIPIENT: &str = "Cannot allocate to this recipient";
-pub const ERR_NO_ALLOCATIONS: &str = "User has no allocations";
-
 // user errors
 pub const ERR_INVALID_UNSTAKE_AMOUNT: &str = "Invalid unstake amount";
 pub const ERR_UNSTAKE_LOCKED: &str = "Unstake is currently locked for this pool";
-pub const ERR_NO_ALLOCATIONS_TO_RECIPIENT: &str = "User has no allocations to this recipient";
 pub const ERR_INSUFFICIENT_NEAR_BALANCE: &str = "Attached deposit too small";
-pub const ERR_EXCESSIVE_DEALLOCATION: &str = "Cannot deallocate more than is allocated";
 pub const ERR_INVALID_NONCE: &str = "Invalid nonce";
 pub const ERR_INSUFFICIENT_TRUNEAR_BALANCE: &str = "Insufficient TruNEAR balance";
 pub const ERR_UNSTAKE_AMOUNT_TOO_LOW: &str = "Unstake amount is too low";

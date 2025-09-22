@@ -21,29 +21,6 @@ pub struct TransferEvent {
     pub memo: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub struct DistributedRewardsEvent {
-    pub user: String,
-    pub recipient: String,
-    pub shares: String,
-    pub near_amount: String,
-    pub user_balance: String,
-    pub recipient_balance: String,
-    pub fees: String,
-    pub treasury_balance: String,
-    pub share_price_num: String,
-    pub share_price_denom: String,
-    pub in_near: bool,
-    pub total_allocated_amount: String,
-    pub total_allocated_share_price_num: String,
-    pub total_allocated_share_price_denom: String,
-}
-
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub struct DistributedAllEvent {
-    pub user: String,
-}
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Event<T> {
     pub standard: String,
