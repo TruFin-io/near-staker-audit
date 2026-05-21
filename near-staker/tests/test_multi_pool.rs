@@ -457,6 +457,23 @@ async fn test_update_total_staked_multi_pool() -> Result<(), Box<dyn std::error:
 }
 
 #[tokio::test]
+async fn test_update_total_staked_caller_not_agent() -> Result<(), Box<dyn std::error::Error>> {
+    let (_owner, sandbox, contract, _pool) = setup_contract_with_pool().await?;
+    let alice = setup_user(&sandbox, "alice").await?;
+
+    let response = alice
+        .call(contract.id(), "update_total_staked")
+        .gas(Gas::from_tgas(300))
+        .transact()
+        .await?;
+
+    assert!(response.is_failure());
+    check_error_msg(response, "Caller is not an agent");
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn test_update_total_staked_with_failure() -> Result<(), Box<dyn std::error::Error>> {
     let (owner, sandbox, contract, pool) = setup_contract_with_pool().await?;
 
