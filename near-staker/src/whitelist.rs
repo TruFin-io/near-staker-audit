@@ -4,7 +4,8 @@ use crate::errors::*;
 use crate::events::Event;
 use crate::*;
 
-/// Whitelist trait for whitelisting and blacklisting users.
+/// Trait for whitelisting/blacklisting users and agent management.Agents are privileged accounts
+/// authorised for whitelist/blacklist management as well as other permissioned operations on the contract.
 pub trait WhitelistTrait {
     fn add_agent(&mut self, agent_id: AccountId);
     fn remove_agent(&mut self, agent_id: AccountId);

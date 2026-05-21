@@ -25,6 +25,7 @@ use crate::errors::*;
 use crate::events::Event;
 use crate::types::*;
 use crate::upgrade::VersionedNearStaker;
+use crate::whitelist::WhitelistTrait;
 
 // Define the contract structure
 #[near(contract_state)]
@@ -71,6 +72,8 @@ pub struct NearStaker {
 
 #[near(serializers = [borsh])]
 pub struct Whitelist {
+    /// Privileged accounts authorised to manage the whitelist/blacklist and to call other
+    /// agent-permissioned methods on the contract (e.g. `update_total_staked`).
     agents: LookupSet<AccountId>,
     users: LookupMap<AccountId, UserStatus>,
 }
@@ -450,7 +453,9 @@ impl NearStaker {
     }
 
     /// Updates the total stake to yield the most up-to-date share price.
+    /// Callable only by an agent or the owner.
     pub fn update_total_staked(&mut self) -> Promise {
+        self.check_agent(env::predecessor_account_id());
         self.check_not_paused();
         self.check_not_locked();
         self.is_locked = true;

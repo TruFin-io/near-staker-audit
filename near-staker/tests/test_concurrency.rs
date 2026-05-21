@@ -16,6 +16,9 @@ async fn test_simultaneous_stake_unstake_yields_constant_total_staked(
     let alice = setup_whitelisted_user(&owner, &contract, "alice").await?;
     let bob = setup_whitelisted_user(&owner, &contract, "bob").await?;
 
+    // Ensure contract is in sync right before staking (epoch may have advanced during setup)
+    let _ = update_total_staked(contract.clone(), owner.clone()).await?;
+
     // alice stakes 10 NEAR
     let alice_stake_amount = 10;
     let stake: near_workspaces::result::ExecutionFinalResult =
@@ -78,6 +81,9 @@ async fn test_simultaneous_stake_unstake_and_update_total_staked_results_in_nond
     let (owner, sandbox, contract, _) = setup_contract_with_pool().await?;
     let alice = setup_whitelisted_user(&owner, &contract, "alice").await?;
     let bob = setup_whitelisted_user(&owner, &contract, "bob").await?;
+
+    // Ensure contract is in sync right before staking (epoch may have advanced during setup)
+    let _ = update_total_staked(contract.clone(), owner.clone()).await?;
 
     // alice stakes 10 NEAR
     let alice_stake_amount = 10;
